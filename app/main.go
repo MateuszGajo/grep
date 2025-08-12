@@ -51,92 +51,215 @@ func hasDigit(line []byte) bool {
 	return false
 }
 
-func hasAlphaNumeric(line []byte) bool {
-	for _, b := range line {
-		if b >= '0' && b <= '9' {
-			return true
-		}
-		if b >= 'a' && b <= 'z' {
-			return true
-		}
+// func hasAlphaNumeric(line []byte) bool {
+// 	for _, b := range line {
+// 		if b >= '0' && b <= '9' {
+// 			return true
+// 		}
+// 		if b >= 'a' && b <= 'z' {
+// 			return true
+// 		}
 
-		if b >= 'A' && b <= 'Z' {
-			return true
-		}
+// 		if b >= 'A' && b <= 'Z' {
+// 			return true
+// 		}
 
-		if b == '_' {
-			return true
-		}
-	}
+// 		if b == '_' {
+// 			return true
+// 		}
+// 	}
 
-	return false
-}
+// 	return false
+// }
 
 type RangeStruct struct {
 	start byte
 	end   byte
 }
 
-func groupSearch(line []byte, pattern string) (bool, error) {
-	ranges := []RangeStruct{}
-	singleChars := []byte{}
+// func getGroups(line []byte, pattern string) ([]RangeStruct, []byte, error) {
+// 	ranges := []RangeStruct{}
+// 	singleChars := []byte{}
+// 	for i := 0; i < len(pattern); i++ {
+// 		if i+1 < len(pattern) && pattern[i+1] == '-' {
+// 			if i+2 >= len(pattern) {
+// 				return nil, nil, fmt.Errorf("invalid group structure expected START-TO format")
+// 			}
+// 			singleRange := RangeStruct{
+// 				start: pattern[i],
+// 				end:   pattern[i+2],
+// 			}
+// 			ranges = append(ranges, singleRange)
+// 			i += 2
+// 		} else {
+// 			singleChars = append(singleChars, pattern[i])
+// 		}
+// 	}
 
-	pattern = pattern[1 : len(pattern)-1]
+// 	return ranges, singleChars, nil
+// }
 
-	for i := 0; i < len(pattern); i++ {
-		if i+1 < len(pattern) && pattern[i+1] == '-' {
-			if i+2 >= len(pattern) {
-				return false, fmt.Errorf("invalid group structure expected START-TO format")
-			}
-			singleRange := RangeStruct{
-				start: pattern[i],
-				end:   pattern[i+2],
-			}
-			ranges = append(ranges, singleRange)
-			i += 2
-		} else {
-			singleChars = append(singleChars, pattern[i])
-		}
-	}
+// func groupSearch(line []byte, pattern string, isNegativeLookup bool) (bool, error) {
 
-	for _, b := range line {
-		for _, c := range ranges {
-			if b >= c.start && b <= c.end {
-				return true, nil
+// 	ranges, singleChars, err := getGroups(line, pattern)
+// 	if err != nil {
+// 		return false, err
+// 	}
+
+// 	if !isNegativeLookup {
+// 		for _, b := range line {
+// 			for _, c := range ranges {
+// 				if b >= c.start && b <= c.end {
+// 					return true, nil
+// 				}
+// 			}
+// 			for _, c := range singleChars {
+// 				if c == b {
+// 					return true, nil
+// 				}
+// 			}
+// 		}
+
+// 		return false, nil
+// 	} else {
+
+// 	mainLoop:
+// 		for _, b := range line {
+// 			for _, c := range ranges {
+// 				if b >= c.start && b <= c.end {
+// 					continue mainLoop
+// 				}
+// 			}
+// 			for _, c := range singleChars {
+// 				if c == b {
+// 					continue mainLoop
+// 				}
+// 			}
+
+// 			return true, nil
+// 		}
+
+// 		return false, nil
+// 	}
+
+// }
+
+// func handleGroup(line []byte, pattern string) (bool, error) {
+// 	if pattern[len(pattern)-1] != ']' {
+// 		return false, fmt.Errorf("gorup pattern should end with ]")
+// 	}
+// 	isNegative := false
+// 	pattern = pattern[1 : len(pattern)-1]
+
+// 	if pattern[0] == '^' {
+// 		isNegative = true
+// 		pattern = pattern[1:]
+// 	}
+
+// 	return groupSearch(line, pattern, isNegative)
+// }
+
+// groups [fsd] group negative lookup[^]
+// single characters lookup: abc
+// regex lookup \d \w
+// start anchor: ^abcd end anchor: $fdsf
+
+//1. We start with pattern look for first index [0]
+// if [ it means its group lookup, validate if there is ]
+// if ^ is start anchor
+// if \d regex
+// rest match chars
+
+// anchor end???
+
+// lets start with parser
+// parser collects information how many diffrent phases it need to pass
+// then we go phase by phase
+// e.g [A-Z] group matches, then returns index next phase is able to pick it up and verify
+// there is somewhere main lookup, that takes an input and patterns, matched for first pattern is match it goes to next phase, if only one phase return result
+
+func matchLine(line []byte, pattern string) (bool, error) {
+
+	parser := Parser{}
+
+	parser.parse(pattern)
+mainLoop:
+	for i := 0; i < len(line); i++ {
+		startIndex := i
+		for _, item := range parser.patterns {
+			endIndex := item.Match(line, startIndex) // index its the last char that matched
+			if endIndex == -1 {
+				continue mainLoop
 			}
+			startIndex = endIndex + 1
 		}
-		for _, c := range singleChars {
-			if c == b {
-				return true, nil
-			}
-		}
+		return true, nil
 	}
 
 	return false, nil
 }
 
-func matchLine(line []byte, pattern string) (bool, error) {
+// func matchLine(line []byte, pattern string) (bool, error) {
 
-	if pattern[0] == '[' && pattern[len(pattern)-1] != ']' {
-		return false, fmt.Errorf("postivie characters group should end with ]")
-	}
+// 	if pattern[0] == '[' && pattern[len(pattern)-1] != ']' {
+// 		return false, fmt.Errorf("postivie characters group should end with ]")
+// 	}
 
-	var ok bool
-	var err error
-	switch {
-	case pattern == "\\d":
-		ok = hasDigit(line)
-	case pattern == "\\w":
-		ok = hasAlphaNumeric(line)
-	case pattern[0] == '[':
-		ok, err = groupSearch(line, pattern)
+// 	// treat it as a special case for now, deal with it later
+// 	if pattern[0] == '[' {
+// 		return handleGroup(line, pattern)
+// 	}
 
-	default:
-		ok = bytes.ContainsAny(line, pattern)
-	}
+// 	startAnchor := false
 
-	// You can use print statements as follows for debugging, they'll be visible when running tests.
-	fmt.Fprintln(os.Stderr, "Logs from your program will appear here!")
+// 	if (pattern[0]) == '^' {
+// 		startAnchor = true
+// 		pattern = pattern[1:]
+// 	}
 
-	return ok, err
-}
+// mainLoop:
+// 	for i := 0; i < len(line); i++ {
+// 		var ok bool
+// 		// var err error
+// 		tmpI := i
+// 		for j := 0; j < len(pattern); j++ {
+
+// 			if pattern[j] == '\\' {
+// 				j = j + 1
+// 				if pattern[j] == 'd' {
+// 					ok = hasDigit([]byte{line[tmpI]})
+// 				} else if pattern[j] == 'w' {
+// 					ok = hasAlphaNumeric([]byte{line[tmpI]})
+// 				}
+
+// 			} else {
+// 				ok = pattern[j] == line[tmpI]
+// 			}
+
+// 			if !ok {
+// 				if startAnchor {
+// 					return false, nil
+// 				}
+// 				continue mainLoop
+// 			} else {
+// 				tmpI = tmpI + 1
+// 				if tmpI == len(line) && j == (len(pattern)-1) {
+// 					return true, nil
+// 				} else if tmpI >= len(line) {
+// 					if startAnchor {
+// 						return false, nil
+// 					}
+// 					continue mainLoop
+// 				}
+// 			}
+// 		}
+
+// 		return true, nil
+// 	}
+
+// 	// You can use print statements as follows for debugging, they'll be visible when running tests.
+// 	fmt.Fprintln(os.Stderr, "Logs from your program will appear here!")
+
+// 	// return ok, err
+// 	return false, nil
+// }
