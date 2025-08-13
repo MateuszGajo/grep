@@ -6,7 +6,7 @@ import (
 )
 
 type Pattern interface {
-	Match(input []byte, startIndex int) int
+	Match(input []byte, startIndex int) (int, int)
 }
 
 type Range struct {
@@ -79,55 +79,78 @@ func (g *GroupPattern) AddPatterns(pattern string) error {
 	return nil
 }
 
-func (g GroupPattern) Match(input []byte, startindex int) int {
+func (g GroupPattern) Match(input []byte, startindex int) (int, int) {
 	if !g.isNegative {
 		return g.MatchPositive(input, startindex)
+	} else {
+		return g.MatchNegative(input, startindex)
 	}
-	panic("should not enter here")
 }
 
-func (g GroupPattern) MatchPositive(input []byte, startIndex int) int {
+func (g GroupPattern) MatchPositive(input []byte, startIndex int) (int, int) {
 
 	for i := startIndex; i < len(input); i++ {
 		for _, item := range g.ranges {
 			if input[i] >= item.from && input[i] <= item.to {
-				return i
+				return i, i
 			}
 		}
 
 		for _, b := range g.extraChars {
 			if input[i] == b {
-				return i
+				return i, i
 			}
 		}
 	}
 
-	return -1
+	return -1, -1
+}
+
+func (g GroupPattern) MatchNegative(input []byte, startIndex int) (int, int) {
+mainLoop:
+	for i := startIndex; i < len(input); i++ {
+		for _, item := range g.ranges {
+			if input[i] >= item.from && input[i] <= item.to {
+				continue mainLoop
+			}
+		}
+
+		for _, b := range g.extraChars {
+			if input[i] == b {
+				continue mainLoop
+			}
+		}
+
+		return i, i
+	}
+
+	return -1, -1
 }
 
 type CharsPattern struct {
 	chars []byte
 }
 
-func (g CharsPattern) Match(input []byte, startindex int) int {
-
-mainLoop:
+func (g CharsPattern) Match(input []byte, startindex int) (int, int) {
+	// slog
+	// log
+	// mainLoop:
 	for i := startindex; i < len(input); i++ {
 		for j := 0; j < len(g.chars); j++ {
 			if i+j == len(input) {
-				return -1
+				return -1, -1
 			}
 			if g.chars[j] != input[i+j] {
-				continue mainLoop
+				return -1, -1
 			}
 
 			if j == len(g.chars)-1 {
-				return i
+				return i + j, i + j
 			}
 		}
 
 	}
-	return -1
+	return -1, -1
 }
 
 func (g *CharsPattern) AddPaterns(pattern string) error {
@@ -142,13 +165,13 @@ type DigitPatterns struct {
 	length int
 }
 
-func (d DigitPatterns) Match(input []byte, startindex int) int {
-	for i := startindex; i <= startindex+d.length; i++ {
+func (d DigitPatterns) Match(input []byte, startindex int) (int, int) {
+	for i := startindex; i < startindex+d.length; i++ {
 		if input[i] < '0' || input[i] > '9' {
-			return -1
+			return -1, -1
 		}
 	}
-	return startindex + d.length
+	return startindex + d.length - 1, startindex + d.length - 1
 }
 
 func (d *DigitPatterns) AddPatterns(pattern string) {
@@ -160,13 +183,13 @@ type AlphaNumericPatterns struct {
 	length int
 }
 
-func (d AlphaNumericPatterns) Match(input []byte, startindex int) int {
+func (d AlphaNumericPatterns) Match(input []byte, startindex int) (int, int) {
 	for i := startindex; i < startindex+d.length; i++ {
 		if !hasAlphaNumeric(input[i]) {
-			return -1
+			return -1, -1
 		}
 	}
-	return startindex + d.length - 1
+	return startindex + d.length - 1, startindex + d.length - 1
 }
 
 func (d *AlphaNumericPatterns) AddPatterns(pattern string) {

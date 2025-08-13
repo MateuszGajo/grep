@@ -222,6 +222,10 @@ func TestCombinationCharacterClassesShouldNotPass(t *testing.T) {
 			input:   "3 dog",
 			pattern: "\\d \\w\\w\\ws",
 		},
+		{
+			input:   "sally has 12 apples",
+			pattern: "\\d\\\\d\\\\d apples",
+		},
 	}
 
 	for _, d := range data {
@@ -260,6 +264,10 @@ func TestStartAnchorShouldPass(t *testing.T) {
 			input:   "log",
 			pattern: "^log",
 		},
+		{
+			input:   "logs",
+			pattern: "^log",
+		},
 	}
 
 	for _, d := range data {
@@ -267,6 +275,86 @@ func TestStartAnchorShouldPass(t *testing.T) {
 			ok, err := matchLine([]byte(d.input), d.pattern)
 
 			if !ok {
+				t.Errorf("Expected to found in %q, using pattern: %q, got err: %v", d.input, d.pattern, err)
+			}
+		})
+	}
+}
+
+func TestStartAnchorAndEndAnchorShouldNotPass(t *testing.T) {
+	data := []InputPattern{
+		{
+			input:   "logs",
+			pattern: "^log$",
+		},
+	}
+
+	for _, d := range data {
+		t.Run("Should pass for input"+d.input, func(t *testing.T) {
+			ok, err := matchLine([]byte(d.input), d.pattern)
+
+			if ok {
+				t.Errorf("Expected to found in %q, using pattern: %q, got err: %v", d.input, d.pattern, err)
+			}
+		})
+	}
+}
+
+func TestStartAnchorAndEndAnchorShouldPass(t *testing.T) {
+	data := []InputPattern{
+		{
+			input:   "log",
+			pattern: "^log$",
+		},
+	}
+
+	for _, d := range data {
+		t.Run("Should pass for input"+d.input, func(t *testing.T) {
+			ok, err := matchLine([]byte(d.input), d.pattern)
+
+			if !ok {
+				t.Errorf("Expected to found in %q, using pattern: %q, got err: %v", d.input, d.pattern, err)
+			}
+		})
+	}
+}
+
+func TestEndAnchorShouldPass(t *testing.T) {
+	data := []InputPattern{
+		{
+			input:   "2321321logs",
+			pattern: "logs$",
+		},
+		{
+			input:   "dog",
+			pattern: "dog$",
+		},
+	}
+
+	for _, d := range data {
+		t.Run("Should pass for input"+d.input, func(t *testing.T) {
+			ok, err := matchLine([]byte(d.input), d.pattern)
+
+			if !ok {
+				t.Errorf("Expected to found in %q, using pattern: %q, got err: %v", d.input, d.pattern, err)
+			}
+		})
+	}
+}
+
+func TestEndAnchorShouldNotPass(t *testing.T) {
+	data := []InputPattern{
+		{
+			input:   "123log",
+			pattern: "logs$",
+		},
+	}
+
+	for _, d := range data {
+		t.Run("Should pass for input"+d.input, func(t *testing.T) {
+			ok, err := matchLine([]byte(d.input), d.pattern)
+
+			if ok {
 				t.Errorf("Expected to found in %q, using pattern: %q, got err: %v", d.input, d.pattern, err)
 			}
 		})

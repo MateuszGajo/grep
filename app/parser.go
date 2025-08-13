@@ -6,10 +6,13 @@ import (
 )
 
 type Parser struct {
-	patterns []Pattern
+	patterns      []Pattern
+	isStartAnchor bool
+	isEndAnchor   bool
 }
 
 func (p *Parser) parse(pattern string) error {
+	p.patterns = []Pattern{}
 	for len(pattern) > 0 {
 		switch pattern[0] {
 		case '[':
@@ -34,6 +37,10 @@ func (p *Parser) parse(pattern string) error {
 			}
 			pattern = pattern[end+1:]
 			p.patterns = append(p.patterns, group)
+		case '^':
+			return fmt.Errorf("anchor ^ only should be at begging")
+		case '$':
+			return fmt.Errorf("anchor & only should be at the end")
 		case '\\':
 			regexPatterns := pattern[1]
 			i := 0
@@ -54,13 +61,13 @@ func (p *Parser) parse(pattern string) error {
 				alphaNumericPattern.AddPatterns(foundPattern)
 				p.patterns = append(p.patterns, alphaNumericPattern)
 			default:
-				panic("not handled \\ for letter, %v" + string(regexPatterns))
+				fmt.Println("youre escpaing not supported option: " + string(regexPatterns) + ";")
 			}
 		default:
 			charPattern := CharsPattern{}
 			i := 0
 			for i = 0; i < len(pattern); i++ {
-				if pattern[i] == '\\' || pattern[i] == '[' {
+				if pattern[i] == '\\' || pattern[i] == '[' || pattern[i] == '$' {
 
 					break
 				}
