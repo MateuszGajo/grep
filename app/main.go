@@ -58,18 +58,17 @@ func matchLine(line []byte, pattern string) (bool, error) {
 	}
 
 	if parser.isStartAnchor {
-		return match2(line, pattern, parser, true, parser.isEndAnchor)
+		return matchLineInternal(line, pattern, parser, true, parser.isEndAnchor)
 	} else if !parser.isEndAnchor {
-		return match2(line, pattern, parser, false, false)
+		return matchLineInternal(line, pattern, parser, false, false)
 	}
 	pattern = reverseString(pattern)
 	reverseBytes(line)
 
-	return match2(line, pattern, parser, true, false)
-
+	return matchLineInternal(line, pattern, parser, true, false)
 }
 
-func match2(line []byte, pattern string, parser Parser, checkFirstIteration bool, checkTillEnd bool) (bool, error) {
+func matchLineInternal(line []byte, pattern string, parser Parser, checkFirstIteration bool, checkTillEnd bool) (bool, error) {
 	err := parser.parse(pattern)
 	if err != nil {
 		panic(err)
@@ -77,37 +76,16 @@ func match2(line []byte, pattern string, parser Parser, checkFirstIteration bool
 mainLoop:
 	for i := 0; i < len(line); i++ {
 		startIndex := i
-		pi := 0
-
-		for pi < len(parser.patterns) {
-			item := parser.patterns[pi]
-			_, endIndex := item.Match(line, startIndex)
-			if endIndex == -1 {
-				if checkFirstIteration {
-					return false, nil
-				}
-
-				// else {
-				// 	continue mainLoop
-				// }
-
-				if startIndex+1 <= len(line) {
-					startIndex++
-					continue
-				}
-
+		endIndex := matchPatterns(parser.patterns, 0, line, startIndex)
+		if endIndex == -1 {
+			if checkFirstIteration {
+				return false, nil
+			} else {
 				continue mainLoop
-
 			}
-			startIndex = endIndex + 1
-			pi++
-		}
-		// for _, item := range parser.patterns {
-		// 	// we can add extra sliding window if idnex from to
-		// 	// get index from parse.patterns and iterate till the end, if error decrement index and try again, till startIndex, if index == startIndex, exit and run rest of code as normal, so if we only has one matching index do not extra sliding window
-		// 	// }
 
-		// }
+		}
+		startIndex = endIndex
 		if checkTillEnd {
 			if startIndex == len(line) {
 				return true, nil
@@ -121,4 +99,31 @@ mainLoop:
 	}
 
 	return false, nil
+}
+
+func matchPatterns(items []Pattern, patternId int, line []byte, startIndex int) int {
+	var previousPattern Pattern
+	if patternId > 0 {
+		previousPattern = items[patternId-1]
+	}
+	start, endIndex := items[patternId].Match(line, startIndex, previousPattern)
+	if endIndex == -1 {
+		return -1
+	}
+	if patternId == len(items)-1 {
+		return endIndex + 1
+	}
+
+	patternId++
+	for i := endIndex + 1; i >= start+1; i-- {
+		returnVal := matchPatterns(items, patternId, line, i)
+
+		if returnVal != -1 {
+			return returnVal
+		}
+
+	}
+
+	return -1
+
 }

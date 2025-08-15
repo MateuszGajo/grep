@@ -360,3 +360,45 @@ func TestEndAnchorShouldNotPass(t *testing.T) {
 		})
 	}
 }
+
+func TestMatchOneOrMore(t *testing.T) {
+	data := []InputPattern{
+		{
+			input:   "caats",
+			pattern: "ca+ts",
+		},
+		{
+			input:   "cat",
+			pattern: "ca+t",
+		},
+	}
+
+	for _, d := range data {
+		t.Run("Should pass for input"+d.input, func(t *testing.T) {
+			ok, err := matchLine([]byte(d.input), d.pattern)
+
+			if !ok {
+				t.Errorf("Expected to found in %q, using pattern: %q, got err: %v", d.input, d.pattern, err)
+			}
+		})
+	}
+}
+
+func TestMatchOneOrMoreShouldNotPass(t *testing.T) {
+	data := []InputPattern{
+		{
+			input:   "caarts",
+			pattern: "ca+ts",
+		},
+	}
+
+	for _, d := range data {
+		t.Run("Should not pass for input"+d.input, func(t *testing.T) {
+			ok, err := matchLine([]byte(d.input), d.pattern)
+
+			if ok {
+				t.Errorf("Expected to not found in %q, using pattern: %q, got err: %v", d.input, d.pattern, err)
+			}
+		})
+	}
+}

@@ -22,7 +22,7 @@ func (p *Parser) parse(pattern string) error {
 			if end == -1 {
 				return fmt.Errorf("invalid group syntax")
 			}
-			// pattern = pattern[1:end]
+
 			if pattern[1] == '^' {
 				group.isNegative = true
 				pattern = pattern[2:]
@@ -41,6 +41,10 @@ func (p *Parser) parse(pattern string) error {
 			return fmt.Errorf("anchor ^ only should be at begging")
 		case '$':
 			return fmt.Errorf("anchor & only should be at the end")
+		case '+':
+			pattern = pattern[1:]
+			oneOrMorePattern := OneOrMorePatterns{}
+			p.patterns = append(p.patterns, oneOrMorePattern)
 		case '\\':
 			regexPatterns := pattern[1]
 			i := 0
@@ -64,25 +68,37 @@ func (p *Parser) parse(pattern string) error {
 				fmt.Println("youre escpaing not supported option: " + string(regexPatterns) + ";")
 			}
 		default:
-			charPattern := CharsPattern{}
+
 			i := 0
 			for i = 0; i < len(pattern); i++ {
 				if pattern[i] == '\\' || pattern[i] == '[' || pattern[i] == '$' {
+					charPattern := CharsPattern{}
+					charPattern.AddPaterns(pattern[:i])
+					pattern = pattern[i:]
+					p.patterns = append(p.patterns, charPattern)
 
 					break
 				}
+				if i == len(pattern)-1 {
+					charPattern := CharsPattern{}
+					charPattern.AddPaterns(pattern[:i+1])
+					pattern = pattern[i+1:]
+					p.patterns = append(p.patterns, charPattern)
+				}
+				if i+1 < len(pattern) && pattern[i+1] == '+' {
+					charPattern := CharsPattern{}
+					charBeforeSpecial := CharsPattern{}
+					charPattern.AddPaterns(pattern[:i])
+					charBeforeSpecial.AddPaterns(pattern[i : i+1])
+					pattern = pattern[i+1:]
+					p.patterns = append(p.patterns, charPattern)
+					p.patterns = append(p.patterns, charBeforeSpecial)
+					break
+				}
 			}
-			charPattern.AddPaterns(pattern[:i])
-			pattern = pattern[i:]
-			p.patterns = append(p.patterns, charPattern)
-
 		}
 
 	}
-
-	// now what happens if there is more than one pattern????????\
-	// either create a new method matchAll and invoke based on number of patterns\
-	// What matchAll returns??
 
 	return nil
 }

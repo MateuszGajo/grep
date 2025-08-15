@@ -6,7 +6,7 @@ import (
 )
 
 type Pattern interface {
-	Match(input []byte, startIndex int) (int, int)
+	Match(input []byte, startIndex int, previousPattern Pattern) (int, int)
 }
 
 type Range struct {
@@ -79,7 +79,7 @@ func (g *GroupPattern) AddPatterns(pattern string) error {
 	return nil
 }
 
-func (g GroupPattern) Match(input []byte, startindex int) (int, int) {
+func (g GroupPattern) Match(input []byte, startindex int, previousPattern Pattern) (int, int) {
 	if !g.isNegative {
 		return g.MatchPositive(input, startindex)
 	} else {
@@ -131,10 +131,8 @@ type CharsPattern struct {
 	chars []byte
 }
 
-func (g CharsPattern) Match(input []byte, startindex int) (int, int) {
-	// slog
-	// log
-	// mainLoop:
+func (g CharsPattern) Match(input []byte, startindex int, previousPattern Pattern) (int, int) {
+
 	for i := startindex; i < len(input); i++ {
 		for j := 0; j < len(g.chars); j++ {
 			if i+j == len(input) {
@@ -165,7 +163,7 @@ type DigitPatterns struct {
 	length int
 }
 
-func (d DigitPatterns) Match(input []byte, startindex int) (int, int) {
+func (d DigitPatterns) Match(input []byte, startindex int, previousPattern Pattern) (int, int) {
 	for i := startindex; i < startindex+d.length; i++ {
 		if input[i] < '0' || input[i] > '9' {
 			return -1, -1
@@ -183,7 +181,7 @@ type AlphaNumericPatterns struct {
 	length int
 }
 
-func (d AlphaNumericPatterns) Match(input []byte, startindex int) (int, int) {
+func (d AlphaNumericPatterns) Match(input []byte, startindex int, previousPattern Pattern) (int, int) {
 	for i := startindex; i < startindex+d.length; i++ {
 		if !hasAlphaNumeric(input[i]) {
 			return -1, -1
@@ -214,4 +212,33 @@ func hasAlphaNumeric(b byte) bool {
 	}
 
 	return false
+}
+
+type OneOrMorePatterns struct {
+}
+
+func (d OneOrMorePatterns) Match(input []byte, startindexPassed int, previousPattern Pattern) (int, int) {
+	previousEndIndex := 0
+	previousStartIndex := 0
+	initStartIndex := startindexPassed - 1
+	index := initStartIndex
+	for {
+		si, ei := previousPattern.Match(input, index, previousPattern)
+		if ei == -1 {
+			if previousStartIndex != previousEndIndex {
+				panic("invalid state")
+			}
+			break
+		}
+		previousStartIndex = si
+		previousEndIndex = ei
+		index++
+	}
+
+	return initStartIndex, previousEndIndex
+
+}
+
+func (d *OneOrMorePatterns) AddPatterns(pattern string) {
+
 }
