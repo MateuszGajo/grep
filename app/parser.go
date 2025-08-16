@@ -43,7 +43,8 @@ func (p *Parser) parse(pattern string) error {
 			return fmt.Errorf("anchor & only should be at the end")
 		case '+':
 			pattern = pattern[1:]
-			oneOrMorePattern := OneOrMorePatterns{}
+			oneOrMorePattern := OneOrMorePatterns{previousPattern: p.patterns[len(p.patterns)-1]}
+			p.patterns = p.patterns[:len(p.patterns)-1]
 			p.patterns = append(p.patterns, oneOrMorePattern)
 		case '\\':
 			regexPatterns := pattern[1]

@@ -215,15 +215,16 @@ func hasAlphaNumeric(b byte) bool {
 }
 
 type OneOrMorePatterns struct {
+	previousPattern Pattern
 }
 
 func (d OneOrMorePatterns) Match(input []byte, startindexPassed int, previousPattern Pattern) (int, int) {
 	previousEndIndex := 0
 	previousStartIndex := 0
-	initStartIndex := startindexPassed - 1
+	initStartIndex := startindexPassed
 	index := initStartIndex
 	for {
-		si, ei := previousPattern.Match(input, index, previousPattern)
+		si, ei := d.previousPattern.Match(input, index, previousPattern)
 		if ei == -1 {
 			if previousStartIndex != previousEndIndex {
 				panic("invalid state")
