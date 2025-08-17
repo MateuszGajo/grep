@@ -6,7 +6,7 @@ import (
 )
 
 type Pattern interface {
-	Match(input []byte, startIndex int, previousPattern Pattern) (int, int)
+	Match(input []byte, startIndex int) (int, int)
 }
 
 type Range struct {
@@ -79,7 +79,7 @@ func (g *GroupPattern) AddPatterns(pattern string) error {
 	return nil
 }
 
-func (g GroupPattern) Match(input []byte, startindex int, previousPattern Pattern) (int, int) {
+func (g GroupPattern) Match(input []byte, startindex int) (int, int) {
 	if !g.isNegative {
 		return g.MatchPositive(input, startindex)
 	} else {
@@ -131,7 +131,7 @@ type CharsPattern struct {
 	chars []byte
 }
 
-func (g CharsPattern) Match(input []byte, startindex int, previousPattern Pattern) (int, int) {
+func (g CharsPattern) Match(input []byte, startindex int) (int, int) {
 
 	for i := startindex; i < len(input); i++ {
 		for j := 0; j < len(g.chars); j++ {
@@ -163,7 +163,7 @@ type DigitPatterns struct {
 	length int
 }
 
-func (d DigitPatterns) Match(input []byte, startindex int, previousPattern Pattern) (int, int) {
+func (d DigitPatterns) Match(input []byte, startindex int) (int, int) {
 	for i := startindex; i < startindex+d.length; i++ {
 		if input[i] < '0' || input[i] > '9' {
 			return -1, -1
@@ -181,7 +181,7 @@ type AlphaNumericPatterns struct {
 	length int
 }
 
-func (d AlphaNumericPatterns) Match(input []byte, startindex int, previousPattern Pattern) (int, int) {
+func (d AlphaNumericPatterns) Match(input []byte, startindex int) (int, int) {
 	for i := startindex; i < startindex+d.length; i++ {
 		if !hasAlphaNumeric(input[i]) {
 			return -1, -1
@@ -218,28 +218,124 @@ type OneOrMorePatterns struct {
 	previousPattern Pattern
 }
 
-func (d OneOrMorePatterns) Match(input []byte, startindexPassed int, previousPattern Pattern) (int, int) {
+func (d OneOrMorePatterns) Match(input []byte, startindexPassed int) (int, int) {
 	previousEndIndex := 0
 	previousStartIndex := 0
-	initStartIndex := startindexPassed
-	index := initStartIndex
+	index := startindexPassed
 	for {
-		si, ei := d.previousPattern.Match(input, index, previousPattern)
-		if ei == -1 {
+		si, ei := d.previousPattern.Match(input, index)
+		if ei == -1 || ei == len(input)-1 {
 			if previousStartIndex != previousEndIndex {
 				panic("invalid state")
 			}
+			previousEndIndex = ei
 			break
 		}
 		previousStartIndex = si
 		previousEndIndex = ei
+		index = ei
 		index++
 	}
 
-	return initStartIndex, previousEndIndex
+	return startindexPassed, previousEndIndex
 
 }
 
 func (d *OneOrMorePatterns) AddPatterns(pattern string) {
+
+}
+
+type OneOrZeroPatterns struct {
+	previousPattern Pattern
+}
+
+func (d OneOrZeroPatterns) Match(input []byte, startindexPassed int) (int, int) {
+
+	// for {
+	si, ei := d.previousPattern.Match(input, startindexPassed)
+	if ei == -1 {
+		if si != ei {
+			panic("invalid state")
+		}
+		return startindexPassed - 1, startindexPassed - 1
+	}
+
+	return si, si
+
+}
+
+func (d *OneOrZeroPatterns) AddPatterns(pattern string) {
+
+}
+
+type WildcardPatterns struct {
+}
+
+func (d WildcardPatterns) Match(input []byte, startindexPassed int) (int, int) {
+	if startindexPassed < len(input) {
+
+		return startindexPassed, startindexPassed
+	}
+	return -1, -1
+
+}
+
+func (d *WildcardPatterns) AddPatterns(pattern string) {
+
+}
+
+type AlternationPatterns struct {
+	patterns []Pattern
+}
+
+func (d AlternationPatterns) Match(input []byte, startindexPassed int) (int, int) {
+	for _, item := range d.patterns {
+		startIndex, endIndex := item.Match(input, startindexPassed)
+
+		if endIndex != -1 {
+			return startIndex, endIndex
+		}
+	}
+	return -1, -1
+
+}
+
+func (d *AlternationPatterns) AddPatterns(pattern string) {
+
+}
+
+type BracketPatterns struct {
+	patterns  []Pattern
+	patternId int
+}
+
+// input:   "I see 1 cat, 2 dogs and 3 cows",
+// pattern: "^I see (\\d (cat|dog|cow)s?(, | and )?)+$",
+func (d *BracketPatterns) Match(input []byte, startindexPassed int) (int, int) {
+
+	start, endIndex := d.patterns[d.patternId].Match(input, startindexPassed)
+	if endIndex == -1 {
+		return -1, -1
+	}
+	if d.patternId == len(d.patterns)-1 {
+		d.patternId = 0
+		return start, endIndex
+	}
+
+	d.patternId++
+	for i := endIndex + 1; i >= start+1; i-- {
+		start, end := d.Match(input, i)
+
+		if end != -1 {
+			return start, end
+		}
+
+	}
+
+	return -1, -1
+
+}
+
+func (d *BracketPatterns) AddPatterns(pattern string) {
 
 }

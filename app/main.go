@@ -102,11 +102,8 @@ mainLoop:
 }
 
 func matchPatterns(items []Pattern, patternId int, line []byte, startIndex int) int {
-	var previousPattern Pattern
-	if patternId > 0 {
-		previousPattern = items[patternId-1]
-	}
-	start, endIndex := items[patternId].Match(line, startIndex, previousPattern)
+
+	start, endIndex := items[patternId].Match(line, startIndex)
 	if endIndex == -1 {
 		return -1
 	}
