@@ -1,25 +1,20 @@
 package main
 
 import (
-	"bytes"
 	"fmt"
 	"io"
 	"os"
 )
 
-// Ensures gofmt doesn't remove the "bytes" import above (feel free to remove this!)
-var _ = bytes.ContainsAny
-
-// Usage: echo <input_text> | your_program.sh -E <pattern>
 func main() {
 	if len(os.Args) < 3 || os.Args[1] != "-E" {
 		fmt.Fprintf(os.Stderr, "usage: mygrep -E <pattern>\n")
-		os.Exit(2) // 1 means no lines were selected, >1 means error
+		os.Exit(2)
 	}
 
 	pattern := os.Args[2]
 
-	line, err := io.ReadAll(os.Stdin) // assume we're only dealing with a single line
+	line, err := io.ReadAll(os.Stdin)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "error: read input text: %v\n", err)
 		os.Exit(2)
@@ -35,21 +30,18 @@ func main() {
 		os.Exit(1)
 	}
 
-	// default exit code is 0 which means success
 }
 
 func matchLine(line []byte, pattern string) (bool, error) {
 	parser := Parser{conversion: Conversion{}, pattern: pattern, pos: 0}
-	nfa := parser.parse()
+	nfa, err := parser.parse()
 	var ok bool
 
-	// You can use print statements as follows for debugging, they'll be visible when running tests.
 	fmt.Fprintln(os.Stderr, "Logs from your program will appear here!")
 
-	// Uncomment this to pass the first stage
 	ok = nfa.run(line)
 
-	return ok, nil
+	return ok, err
 }
 
 type NFATransition struct {
@@ -85,16 +77,18 @@ func (n *NFA) addStates(states []State) {
 	}
 }
 
-func (n *NFA) addTransition(from State, to State, matcher Matcher) {
+func (n *NFA) addTransition(from State, to State, matcher Matcher) error {
 
 	fromState, ok := n.states[from.name]
 	if !ok {
-		panic("could find state from")
+		return fmt.Errorf("could find state from")
 	}
 
 	fromState.transitions = append(fromState.transitions, NFATransition{to: to.name, matcher: matcher})
 
 	n.states[from.name] = fromState
+
+	return nil
 }
 
 func (n *NFA) setInitState(state State) {
@@ -159,7 +153,7 @@ func (n *NFA) run(line []byte) bool {
 //   Alternation     → Concatenation ("|" Concatenation)*
 //   Concatenation   → QuantifiedAtom+
 //   QuantifiedAtom  → Atom Quantifier?
-//   Atom            → Literal | Group | CharClass
+//   Atom            → Literal | Group | CharClass | Escape
 //   Quantifier      → '?' | '*' | '+' | '{' Number (',' Number?)? '}'
 //
 // ---------------------------------------------------------
@@ -170,6 +164,7 @@ func (n *NFA) run(line []byte) bool {
 //      - Literal      : a single character (e.g. "a", "9", ".")
 //      - Group        : a sub-expression in parentheses (e.g. "(ab|cd)")
 //      - CharClass    : a character set in brackets (e.g. "[a-z0-9]", "[^abc]")
+//		- Escape	   : an espcped characters such as \d \w
 //
 // Focus on the next steps later; for now, only Atom is relevant
 // 2. Quantifier
@@ -203,16 +198,19 @@ func (n *NFA) run(line []byte) bool {
 type Conversion struct {
 }
 
-func (c Conversion) oneStepNFA(matcher Matcher) NFA {
+func (c Conversion) oneStepNFA(matcher Matcher) (NFA, error) {
 	nfa := NFA{states: map[string]State{}}
 	a := *NewState()
 	b := *NewState()
 	nfa.addStates([]State{a, b})
 	nfa.setInitState(a)
-	nfa.setFinalStates([]State{b})
-	nfa.addTransition(a, b, matcher)
+	err := nfa.setFinalStates([]State{b})
+	if err != nil {
+		return nfa, err
+	}
+	err = nfa.addTransition(a, b, matcher)
 
-	return nfa
+	return nfa, err
 }
 
 type Parser struct {
@@ -221,19 +219,35 @@ type Parser struct {
 	conversion Conversion
 }
 
-func (p Parser) parse() NFA {
+func (p *Parser) parse() (NFA, error) {
 	return p.parseAtom()
 }
 
-func (p Parser) parseAtom() NFA {
+func (p *Parser) parseAtom() (NFA, error) {
 	switch p.pattern[p.pos] {
+	case '\\':
+		return p.parseEscape(p.pattern)
 	default:
-		return p.parseLiteral(p.pattern[p.pos])
+		return p.parseLiteral(p.pattern)
 	}
 }
 
-func (p Parser) parseLiteral(b byte) NFA {
-	return p.conversion.oneStepNFA(LiteralMatcher{char: b})
+func (p *Parser) parseEscape(pattern string) (NFA, error) {
+	p.pos++
+	esc := p.pattern[p.pos]
+	p.pos++
+	switch esc {
+	case 'd':
+		return p.conversion.oneStepNFA(DigitMatcher{})
+	default:
+		return NFA{}, fmt.Errorf("unsupported escape: \\%c", esc)
+	}
+}
+
+func (p *Parser) parseLiteral(pattern string) (NFA, error) {
+	matcher := LiteralMatcher{char: pattern[p.pos]}
+	p.pos++
+	return p.conversion.oneStepNFA(matcher)
 }
 
 // ------------------ Stack ------------------
@@ -265,4 +279,15 @@ type LiteralMatcher struct {
 
 func (lm LiteralMatcher) match(b byte) bool {
 	return lm.char == b
+}
+
+type DigitMatcher struct {
+}
+
+func (dm DigitMatcher) match(b byte) bool {
+	if b >= '0' && b <= '9' {
+		return true
+	}
+
+	return false
 }
