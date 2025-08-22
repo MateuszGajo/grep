@@ -1,0 +1,149 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+    <title>Regex Matcher</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 20px;
+        }
+
+        form {
+            margin-bottom: 20px;
+        }
+
+        input[type="text"] {
+            width: 300px;
+            padding: 5px;
+            margin: 5px;
+        }
+
+        input[type="submit"] {
+            padding: 8px 16px;
+        }
+
+        .results {
+            display: flex;
+            gap: 20px;
+        }
+
+        .matches,
+        .fsm {
+            border: 1px solid #ccc;
+            padding: 10px;
+            min-width: 300px;
+        }
+
+        #fsm-canvas {
+            border: 1px solid #000;
+            background: white;
+        }
+    </style>
+</head>
+
+<body>
+    <h1>Regex Matcher</h1>
+
+    <form method="POST">
+        <label>Regex: <input type="text" name="regex" value="{{ .Regex }}"></label><br>
+        <label>Text: <input type="text" name="text" value="{{ .Text }}"></label><br>
+        <input type="submit" value="Match">
+    </form>
+
+    {{ if .Matches }}
+    <div class="results">
+        <div class="matches">
+            <h2>Matches:</h2>
+            <pre>{{ range .Matches }}{{ . }}
+{{ end }}</pre>
+        </div>
+
+        <div class="fsm">
+            <h2>FSM:</h2>
+            <canvas id="fsm-canvas" width="400" height="300"></canvas>
+        </div>
+    </div>
+    {{ end }}
+
+    <script>
+        const nfaData = {{if .NFAJson}}{{.NFAJson}}{{else}}null{{end}};
+
+        function drawFSM() {
+            const canvas = document.getElementById('fsm-canvas');
+            if (!canvas || !nfaData) return;
+
+            const ctx = canvas.getContext('2d');
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+            const states = Object.keys(nfaData.states);
+            const positions = {};
+
+            // Position states in a simple horizontal line
+            states.forEach((state, i) => {
+                positions[state] = {
+                    x: 50 + i * 100,
+                    y: 150
+                };
+            });
+
+            // Draw transitions (arrows)
+            Object.values(nfaData.states).forEach(state => {
+                state.transitions.forEach(trans => {
+                    const from = positions[state.name];
+                    const to = positions[trans.to];
+                    if (from && to) {
+                        // Draw arrow
+                        ctx.beginPath();
+                        ctx.moveTo(from.x + 20, from.y);
+                        ctx.lineTo(to.x - 20, to.y);
+                        ctx.stroke();
+
+                        // Arrow head
+                        ctx.beginPath();
+                        ctx.moveTo(to.x - 20, to.y);
+                        ctx.lineTo(to.x - 25, to.y - 5);
+                        ctx.moveTo(to.x - 20, to.y);
+                        ctx.lineTo(to.x - 25, to.y + 5);
+                        ctx.stroke();
+
+                        // Label
+                        const midX = (from.x + to.x) / 2;
+                        const midY = (from.y + to.y) / 2 - 10;
+                        ctx.fillText(trans.label, midX, midY);
+                    }
+                });
+            });
+
+            // Draw states (circles)
+            states.forEach(stateName => {
+                const pos = positions[stateName];
+                const state = nfaData.states[stateName];
+
+                // Circle
+                ctx.beginPath();
+                ctx.arc(pos.x, pos.y, 20, 0, 2 * Math.PI);
+                ctx.fillStyle = state.isFinal ? '#ffcccc' : '#ccccff';
+                if (stateName === nfaData.initState) ctx.fillStyle = '#ccffcc';
+                ctx.fill();
+                ctx.stroke();
+
+                // Double circle for final states
+                if (state.isFinal) {
+                    ctx.beginPath();
+                    ctx.arc(pos.x, pos.y, 15, 0, 2 * Math.PI);
+                    ctx.stroke();
+                }
+
+                // State name
+                ctx.fillStyle = 'black';
+                ctx.textAlign = 'center';
+                ctx.fillText(stateName, pos.x, pos.y + 5);
+            });
+        }
+
+        window.onload = drawFSM;
+    </script>
+</body>
+
+</html>

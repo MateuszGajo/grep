@@ -1,12 +1,32 @@
 package main
 
 import (
+	"flag"
 	"fmt"
 	"io"
 	"os"
 )
 
+func bytesToStrings(bs [][]byte) []string {
+	var ss []string
+	for _, b := range bs {
+		ss = append(ss, string(b))
+	}
+	return ss
+}
+
 func main() {
+	web := flag.Bool("web", false, "start web server")
+	flag.Parse()
+
+	if *web {
+		webServer()
+	} else {
+		cli()
+	}
+}
+
+func cli() {
 	if len(os.Args) < 3 || os.Args[1] != "-E" {
 		fmt.Fprintf(os.Stderr, "usage: mygrep -E <pattern>\n")
 		os.Exit(2)
@@ -20,28 +40,41 @@ func main() {
 		os.Exit(2)
 	}
 
-	ok, err := matchLine(line, pattern)
+	matches, err := matchLine(line, pattern)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "error: %v\n", err)
 		os.Exit(2)
 	}
 
-	if !ok {
+	if len(matches) == 0 {
 		os.Exit(1)
 	}
 
 }
-
-func matchLine(line []byte, pattern string) (bool, error) {
+func matchLineDetails(line []byte, pattern string) ([][]byte, NFA, error) {
 	parser := Parser{conversion: Conversion{}, pattern: pattern, pos: 0}
 	nfa, err := parser.parse()
-	var ok bool
 
 	fmt.Fprintln(os.Stderr, "Logs from your program will appear here!")
 
-	ok = nfa.run(line)
+	matches := nfa.findAllMatches(line)
+	fmt.Println("matches??", matches)
+	fmt.Println("nfa")
+	fmt.Printf("%+v \n", nfa)
 
-	return ok, err
+	return matches, nfa, err
+}
+
+func matchLine(line []byte, pattern string) ([][]byte, error) {
+	parser := Parser{conversion: Conversion{}, pattern: pattern, pos: 0}
+	nfa, err := parser.parse()
+
+	fmt.Fprintln(os.Stderr, "Logs from your program will appear here!")
+
+	matches := nfa.findAllMatches(line)
+	fmt.Println("matches??", matches)
+
+	return matches, err
 }
 
 type NFATransition struct {
@@ -52,6 +85,7 @@ type NFATransition struct {
 
 type NFA struct {
 	initState string
+	endStates []string
 	states    map[string]State
 }
 
@@ -96,6 +130,7 @@ func (n *NFA) setInitState(state State) {
 }
 
 func (n *NFA) setFinalStates(states []State) error {
+	n.endStates = []string{}
 	for _, state := range states {
 		state, ok := n.states[state.name]
 
@@ -106,6 +141,7 @@ func (n *NFA) setFinalStates(states []State) error {
 		state.isFinal = true
 
 		n.states[state.name] = state
+		n.endStates = append(n.endStates, state.name)
 	}
 
 	return nil
@@ -120,19 +156,20 @@ type Stack struct {
 	data []StackData
 }
 
-func (n *NFA) run(line []byte) bool {
+func (n *NFA) run(line []byte) (bool, []byte) {
 	stack := Stack{}
 	stack.push(n.states[n.initState], 0)
 
 	for stack.length() > 0 {
 		item := stack.pop()
 		if item.currentState.isFinal {
-			return true
+			return true, line[:item.i]
 		}
 
 		for _, transition := range item.currentState.transitions {
-
-			if transition.matcher.match(line[item.i]) {
+			fmt.Println("line", line)
+			fmt.Println("item", item.i)
+			if item.i < len(line) && transition.matcher.match(line[item.i]) {
 				newIndex := item.i
 				if !transition.isEpsilon {
 					newIndex += 1
@@ -142,7 +179,20 @@ func (n *NFA) run(line []byte) bool {
 			}
 		}
 	}
-	return false
+	return false, nil
+}
+
+func (n *NFA) findAllMatches(input []byte) [][]byte {
+	matches := [][]byte{}
+	for i := 0; i < len(input); i++ {
+		ok, match := n.run(input[i:])
+		if ok {
+			matches = append(matches, match)
+		}
+
+	}
+
+	return matches
 }
 
 // ------------------ Parser ------------------
@@ -195,6 +245,47 @@ func (n *NFA) run(line []byte) bool {
 //
 // =========================================================
 
+func (n *NFA) appendNfa(nfa NFA, unionStateName string) {
+	// first nfa is q1 ->(\d) q2
+	//second nfa is q3 ->(\d) q4
+	// as result we need to have q1->q2->q4, q3= q2 state basically
+	// need also set q4 as ending state, and remove q2 as ending state
+	// pass transition from q3 to q2
+	states := []State{}
+	for _, item := range nfa.states {
+		// skip q3 state
+		fmt.Println(item)
+		fmt.Println(unionStateName)
+		if item.name == nfa.initState {
+			continue
+		}
+		states = append(states, item)
+	}
+
+	unionState := n.states[unionStateName]
+	unionState.isFinal = false
+	n.states[unionStateName] = unionState
+	n.addStates(states)
+
+	nfaInitState := nfa.states[nfa.initState]
+	for _, transition := range nfaInitState.transitions {
+		n.addTransition(unionState, n.states[transition.to], transition.matcher)
+	}
+
+	newEndStates := []string{}
+
+	for _, item := range n.endStates {
+
+		if item == unionStateName {
+			newEndStates = append(newEndStates, nfa.endStates...)
+		} else {
+			newEndStates = append(newEndStates, item)
+		}
+	}
+	n.endStates = newEndStates
+
+}
+
 type Conversion struct {
 }
 
@@ -219,8 +310,41 @@ type Parser struct {
 	conversion Conversion
 }
 
+func (p Parser) isEnd() bool {
+	return p.pos >= len(p.pattern)
+}
+
 func (p *Parser) parse() (NFA, error) {
-	return p.parseAtom()
+	stateCounter = 0
+	left, err := p.parseRepeat()
+	if err != nil {
+		return NFA{}, err
+	}
+	for !p.isEnd() {
+		right, err := p.parseRepeat()
+		if err != nil {
+			return NFA{}, err
+		}
+		left.appendNfa(right, left.endStates[0])
+
+	}
+
+	return left, nil
+}
+
+func (p *Parser) parseRepeat() (NFA, error) {
+	leftAtom, err := p.parseAtom()
+
+	if p.isEnd() {
+		return leftAtom, err
+	}
+
+	return leftAtom, err
+	// rightAtom, err := p.parseAtom()
+
+	// leftAtom.appendNfa(rightAtom, leftAtom.endStates[0])
+
+	// return leftAtom, err
 }
 
 func (p *Parser) parseAtom() (NFA, error) {
