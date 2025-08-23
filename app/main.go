@@ -1,7 +1,6 @@
 package main
 
 import (
-	"flag"
 	"fmt"
 	"io"
 	"os"
@@ -16,10 +15,12 @@ func bytesToStrings(bs [][]byte) []string {
 }
 
 func main() {
-	web := flag.Bool("web", false, "start web server")
-	flag.Parse()
+	web := false
+	if os.Args[1] == "-web" {
+		web = true
+	}
 
-	if *web {
+	if web {
 		webServer()
 	} else {
 		cli()
@@ -58,9 +59,6 @@ func matchLineDetails(line []byte, pattern string) ([][]byte, NFA, error) {
 	fmt.Fprintln(os.Stderr, "Logs from your program will appear here!")
 
 	matches := nfa.findAllMatches(line)
-	fmt.Println("matches??", matches)
-	fmt.Println("nfa")
-	fmt.Printf("%+v \n", nfa)
 
 	return matches, nfa, err
 }
@@ -72,7 +70,6 @@ func matchLine(line []byte, pattern string) ([][]byte, error) {
 	fmt.Fprintln(os.Stderr, "Logs from your program will appear here!")
 
 	matches := nfa.findAllMatches(line)
-	fmt.Println("matches??", matches)
 
 	return matches, err
 }
@@ -97,9 +94,9 @@ type State struct {
 
 var stateCounter int = 0
 
-func NewState() *State {
+func NewState() State {
 	stateCounter++
-	return &State{
+	return State{
 		name:        fmt.Sprintf("q%d", stateCounter),
 		transitions: []NFATransition{},
 	}
@@ -167,8 +164,6 @@ func (n *NFA) run(line []byte) (bool, []byte) {
 		}
 
 		for _, transition := range item.currentState.transitions {
-			fmt.Println("line", line)
-			fmt.Println("item", item.i)
 			if item.i < len(line) && transition.matcher.match(line[item.i]) {
 				newIndex := item.i
 				if !transition.isEpsilon {
@@ -193,6 +188,35 @@ func (n *NFA) findAllMatches(input []byte) [][]byte {
 	}
 
 	return matches
+}
+
+func (n *NFA) appendNfa(nfa NFA, unionStateName string) {
+	for _, item := range nfa.states {
+		if item.name == nfa.initState {
+			continue
+		}
+		n.states[item.name] = item
+	}
+
+	for _, transition := range nfa.states[nfa.initState].transitions {
+		n.addTransition(n.states[unionStateName], n.states[transition.to], transition.matcher)
+	}
+
+	newEndStates := []string{}
+
+	for _, item := range n.endStates {
+
+		if item == unionStateName {
+			newEndStates = append(newEndStates, nfa.endStates...)
+			unionState := n.states[unionStateName]
+			unionState.isFinal = false
+			n.states[unionStateName] = unionState
+		} else {
+			newEndStates = append(newEndStates, item)
+		}
+	}
+	n.endStates = newEndStates
+
 }
 
 // ------------------ Parser ------------------
@@ -245,54 +269,13 @@ func (n *NFA) findAllMatches(input []byte) [][]byte {
 //
 // =========================================================
 
-func (n *NFA) appendNfa(nfa NFA, unionStateName string) {
-	// first nfa is q1 ->(\d) q2
-	//second nfa is q3 ->(\d) q4
-	// as result we need to have q1->q2->q4, q3= q2 state basically
-	// need also set q4 as ending state, and remove q2 as ending state
-	// pass transition from q3 to q2
-	states := []State{}
-	for _, item := range nfa.states {
-		// skip q3 state
-		fmt.Println(item)
-		fmt.Println(unionStateName)
-		if item.name == nfa.initState {
-			continue
-		}
-		states = append(states, item)
-	}
-
-	unionState := n.states[unionStateName]
-	unionState.isFinal = false
-	n.states[unionStateName] = unionState
-	n.addStates(states)
-
-	nfaInitState := nfa.states[nfa.initState]
-	for _, transition := range nfaInitState.transitions {
-		n.addTransition(unionState, n.states[transition.to], transition.matcher)
-	}
-
-	newEndStates := []string{}
-
-	for _, item := range n.endStates {
-
-		if item == unionStateName {
-			newEndStates = append(newEndStates, nfa.endStates...)
-		} else {
-			newEndStates = append(newEndStates, item)
-		}
-	}
-	n.endStates = newEndStates
-
-}
-
 type Conversion struct {
 }
 
 func (c Conversion) oneStepNFA(matcher Matcher) (NFA, error) {
 	nfa := NFA{states: map[string]State{}}
-	a := *NewState()
-	b := *NewState()
+	a := NewState()
+	b := NewState()
 	nfa.addStates([]State{a, b})
 	nfa.setInitState(a)
 	err := nfa.setFinalStates([]State{b})
@@ -350,26 +333,28 @@ func (p *Parser) parseRepeat() (NFA, error) {
 func (p *Parser) parseAtom() (NFA, error) {
 	switch p.pattern[p.pos] {
 	case '\\':
-		return p.parseEscape(p.pattern)
+		return p.parseEscape()
 	default:
-		return p.parseLiteral(p.pattern)
+		return p.parseLiteral()
 	}
 }
 
-func (p *Parser) parseEscape(pattern string) (NFA, error) {
+func (p *Parser) parseEscape() (NFA, error) {
 	p.pos++
 	esc := p.pattern[p.pos]
 	p.pos++
 	switch esc {
 	case 'd':
 		return p.conversion.oneStepNFA(DigitMatcher{})
+	case 'w':
+		return p.conversion.oneStepNFA(WordMatcher{})
 	default:
 		return NFA{}, fmt.Errorf("unsupported escape: \\%c", esc)
 	}
 }
 
-func (p *Parser) parseLiteral(pattern string) (NFA, error) {
-	matcher := LiteralMatcher{char: pattern[p.pos]}
+func (p *Parser) parseLiteral() (NFA, error) {
+	matcher := LiteralMatcher{char: p.pattern[p.pos]}
 	p.pos++
 	return p.conversion.oneStepNFA(matcher)
 }
@@ -410,6 +395,29 @@ type DigitMatcher struct {
 
 func (dm DigitMatcher) match(b byte) bool {
 	if b >= '0' && b <= '9' {
+		return true
+	}
+
+	return false
+}
+
+type WordMatcher struct {
+}
+
+func (wm WordMatcher) match(b byte) bool {
+	if b >= '0' && b <= '9' {
+		return true
+	}
+
+	if b >= 'a' && b <= 'z' {
+		return true
+	}
+
+	if b >= 'A' && b <= 'Z' {
+		return true
+	}
+
+	if b == '_' {
 		return true
 	}
 

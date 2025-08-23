@@ -42,7 +42,7 @@ func webServer() {
 			if err != nil {
 				log.Fatal(err)
 			}
-			fmt.Printf("%+v\n", nfa)
+
 			nfaData := convertNFAToData(nfa)
 			nfaJson, _ := json.Marshal(nfaData)
 			data := WebData{
@@ -58,7 +58,6 @@ func webServer() {
 				log.Fatal(err)
 			}
 		} else {
-			fmt.Println("else?")
 			http.ServeFile(w, r, "index.html")
 		}
 	})
@@ -101,6 +100,8 @@ func getMatcherLabel(matcher Matcher) string {
 		return string(m.char)
 	case DigitMatcher:
 		return "\\d"
+	case WordMatcher:
+		return "\\w"
 	default:
 		return "?"
 	}
