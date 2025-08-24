@@ -129,5 +129,48 @@ func TestWordMatching(t *testing.T) {
 			}
 		})
 	}
+}
 
+func TestCharGroupMatching(t *testing.T) {
+	data := []Data{
+		{
+			pattern: "[\\w]",
+			input:   "12a",
+			matches: []string{"1", "2", "a"},
+		},
+		{
+			pattern: "[\\w\\w]",
+			input:   "12ab",
+			matches: []string{"1", "2", "a", "b"},
+		},
+		{
+			pattern: "[\\w]",
+			input:   "1$2",
+			matches: []string{"1", "2"},
+		},
+		{
+			pattern: "[\\2]",
+			input:   "%$#",
+			matches: []string{},
+		},
+		{
+			pattern: "[^abcd]",
+			input:   "abcde",
+			matches: []string{"e"},
+		},
+	}
+
+	for _, item := range data {
+		t.Run(fmt.Sprintf("Checking input %v, for pattern %v", item.input, item.pattern), func(t *testing.T) {
+			matches, _ := matchLine([]byte(item.input), item.pattern)
+			matchesString := []string{}
+			for _, item := range matches {
+				matchesString = append(matchesString, string(item))
+			}
+
+			if !stringSliceEqual(matchesString, item.matches) {
+				t.Errorf("Expected to find these matches: %v, got: %v", item.matches, matchesString)
+			}
+		})
+	}
 }

@@ -4,6 +4,8 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"slices"
+	"strings"
 )
 
 func bytesToStrings(bs [][]byte) []string {
@@ -297,6 +299,18 @@ func (p Parser) isEnd() bool {
 	return p.pos >= len(p.pattern)
 }
 
+func (p Parser) peekNext() byte {
+	index := p.pos
+	index++
+	return p.pattern[index]
+}
+
+func (p Parser) isNextEnd() bool {
+	index := p.pos
+	index++
+	return index >= len(p.pattern)
+}
+
 func (p *Parser) parse() (NFA, error) {
 	stateCounter = 0
 	left, err := p.parseRepeat()
@@ -334,7 +348,10 @@ func (p *Parser) parseAtom() (NFA, error) {
 	switch p.pattern[p.pos] {
 	case '\\':
 		return p.parseEscape()
+	case '[':
+		return p.parseCharGroup()
 	default:
+
 		return p.parseLiteral()
 	}
 }
@@ -345,12 +362,63 @@ func (p *Parser) parseEscape() (NFA, error) {
 	p.pos++
 	switch esc {
 	case 'd':
-		return p.conversion.oneStepNFA(DigitMatcher{})
+		return p.conversion.oneStepNFA(NewDigitMatcher())
 	case 'w':
-		return p.conversion.oneStepNFA(WordMatcher{})
+		return p.conversion.oneStepNFA(NewWordMatcher())
 	default:
 		return NFA{}, fmt.Errorf("unsupported escape: \\%c", esc)
 	}
+}
+
+func (p *Parser) parseCharGroup() (NFA, error) {
+	if !strings.Contains(p.pattern[p.pos:], "]") {
+		return NFA{}, fmt.Errorf("missing ] for char group")
+	}
+	start := p.pos
+	p.pos++
+	isNegative := false
+	if p.pattern[p.pos] == '^' {
+		isNegative = true
+		p.pos++
+	}
+	ranges := []CharRange{}
+	chars := []byte{}
+	for !p.isEnd() && p.pattern[p.pos] != ']' {
+		char := p.pattern[p.pos]
+		switch char {
+		case '\\':
+			p.pos++
+			if p.isEnd() {
+				return NFA{}, fmt.Errorf("end condition after //")
+			}
+			esc := p.pattern[p.pos]
+			switch esc {
+			case 'd':
+				ranges = append(ranges, digitMatcherRanges...)
+			case 'w':
+				ranges = append(ranges, wordMarcherRanges...)
+				chars = append(chars, wordMatcherChars...)
+			}
+		default:
+			if !p.isNextEnd() && p.peekNext() == '-' {
+				p.pos++
+				if p.isNextEnd() {
+					return NFA{}, fmt.Errorf("end condition of range its the last char in pattern")
+				}
+				p.pos++
+				nextChar := p.pattern[p.pos]
+				ranges = append(ranges, CharRange{from: char, to: nextChar})
+			} else {
+				chars = append(chars, char)
+			}
+
+		}
+		p.pos++
+	}
+	p.pos++
+	charGroupMatcher := NewCharacterGroupMatcher(ranges, chars, isNegative, p.pattern[start:p.pos])
+
+	return p.conversion.oneStepNFA(charGroupMatcher)
 }
 
 func (p *Parser) parseLiteral() (NFA, error) {
@@ -391,35 +459,88 @@ func (lm LiteralMatcher) match(b byte) bool {
 }
 
 type DigitMatcher struct {
+	ranges []CharRange
 }
 
 func (dm DigitMatcher) match(b byte) bool {
-	if b >= '0' && b <= '9' {
-		return true
-	}
+	return matchRanges(dm.ranges, b)
+}
 
-	return false
+func NewDigitMatcher() WordMatcher {
+	return WordMatcher{
+		ranges: digitMatcherRanges,
+	}
 }
 
 type WordMatcher struct {
+	ranges []CharRange
+	chars  []byte
 }
 
 func (wm WordMatcher) match(b byte) bool {
-	if b >= '0' && b <= '9' {
+	return matchRanges(wm.ranges, b) || matchChars(wm.chars, b)
+}
+
+var (
+	wordMarcherRanges  = []CharRange{{from: '0', to: '9'}, {from: 'a', to: 'z'}, {from: 'A', to: 'Z'}}
+	wordMatcherChars   = []byte{'_'}
+	digitMatcherRanges = []CharRange{{from: '0', to: '9'}}
+)
+
+func NewWordMatcher() WordMatcher {
+	return WordMatcher{
+		ranges: wordMarcherRanges,
+		chars:  wordMatcherChars,
+	}
+}
+
+type CharRange struct {
+	from byte
+	to   byte
+}
+
+func (charRange CharRange) match(b byte) bool {
+	if b >= charRange.from && b <= charRange.to {
 		return true
 	}
-
-	if b >= 'a' && b <= 'z' {
-		return true
-	}
-
-	if b >= 'A' && b <= 'Z' {
-		return true
-	}
-
-	if b == '_' {
-		return true
-	}
-
 	return false
+}
+
+type CharacterGroupMatcher struct {
+	ranges     []CharRange
+	chars      []byte
+	isNegative bool
+	label      string
+}
+
+func (cgm CharacterGroupMatcher) match(b byte) bool {
+	base := matchChars(cgm.chars, b) || matchRanges(cgm.ranges, b)
+
+	if cgm.isNegative {
+		return !base
+	}
+
+	return base
+}
+
+func NewCharacterGroupMatcher(ranges []CharRange, chars []byte, isNegative bool, label string) CharacterGroupMatcher {
+	return CharacterGroupMatcher{
+		ranges:     ranges,
+		chars:      chars,
+		isNegative: isNegative,
+		label:      label,
+	}
+}
+
+func matchRanges(ranges []CharRange, b byte) bool {
+	for _, item := range ranges {
+		if item.match(b) {
+			return true
+		}
+	}
+	return false
+}
+
+func matchChars(chars []byte, b byte) bool {
+	return slices.Contains(chars, b)
 }

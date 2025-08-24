@@ -102,6 +102,8 @@ func getMatcherLabel(matcher Matcher) string {
 		return "\\d"
 	case WordMatcher:
 		return "\\w"
+	case CharacterGroupMatcher:
+		return m.label
 	default:
 		return "?"
 	}
