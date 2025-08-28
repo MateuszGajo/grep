@@ -39,7 +39,7 @@ func TestLiteralMatching(t *testing.T) {
 
 	for _, item := range data {
 		t.Run(fmt.Sprintf("Checking input %v, for pattern %v", item.input, item.pattern), func(t *testing.T) {
-			matches, _ := matchLine([]byte(item.input), item.pattern)
+			matches, _, _ := matchLine([]byte(item.input), item.pattern)
 			matchesString := []string{}
 			for _, item := range matches {
 				matchesString = append(matchesString, string(item))
@@ -78,7 +78,7 @@ func TestDigitMatching(t *testing.T) {
 
 	for _, item := range data {
 		t.Run(fmt.Sprintf("Checking input %v, for pattern %v", item.input, item.pattern), func(t *testing.T) {
-			matches, _ := matchLine([]byte(item.input), item.pattern)
+			matches, _, _ := matchLine([]byte(item.input), item.pattern)
 			matchesString := []string{}
 			for _, item := range matches {
 				matchesString = append(matchesString, string(item))
@@ -102,7 +102,7 @@ func TestWordMatching(t *testing.T) {
 		{
 			pattern: "\\w\\w",
 			input:   "12ab",
-			matches: []string{"12", "2a", "ab"},
+			matches: []string{"12", "ab"},
 		},
 		{
 			pattern: "\\w",
@@ -110,7 +110,7 @@ func TestWordMatching(t *testing.T) {
 			matches: []string{"1", "2"},
 		},
 		{
-			pattern: "\\2",
+			pattern: "\\w",
 			input:   "%$#",
 			matches: []string{},
 		},
@@ -118,7 +118,7 @@ func TestWordMatching(t *testing.T) {
 
 	for _, item := range data {
 		t.Run(fmt.Sprintf("Checking input %v, for pattern %v", item.input, item.pattern), func(t *testing.T) {
-			matches, _ := matchLine([]byte(item.input), item.pattern)
+			matches, _, _ := matchLine([]byte(item.input), item.pattern)
 			matchesString := []string{}
 			for _, item := range matches {
 				matchesString = append(matchesString, string(item))
@@ -162,7 +162,85 @@ func TestCharGroupMatching(t *testing.T) {
 
 	for _, item := range data {
 		t.Run(fmt.Sprintf("Checking input %v, for pattern %v", item.input, item.pattern), func(t *testing.T) {
-			matches, _ := matchLine([]byte(item.input), item.pattern)
+			matches, _, _ := matchLine([]byte(item.input), item.pattern)
+			matchesString := []string{}
+			for _, item := range matches {
+				matchesString = append(matchesString, string(item))
+			}
+
+			if !stringSliceEqual(matchesString, item.matches) {
+				t.Errorf("Expected to find these matches: %v, got: %v", item.matches, matchesString)
+			}
+		})
+	}
+}
+
+func TestCombingCharClass(t *testing.T) {
+	data := []Data{
+		{
+			pattern: "\\d\\d\\d apples",
+			input:   "sally has 124 apples",
+			matches: []string{"124 apples"},
+		},
+		{
+			pattern: "\\d \\w\\w\\ws",
+			input:   "sally has 3 dogs",
+			matches: []string{"3 dogs"},
+		},
+		{
+			pattern: "\\d\\\\d\\\\d apples",
+			input:   "sally has 12 apples",
+			matches: []string{},
+		},
+	}
+
+	for _, item := range data {
+		t.Run(fmt.Sprintf("Checking input %v, for pattern %v", item.input, item.pattern), func(t *testing.T) {
+			matches, _, _ := matchLine([]byte(item.input), item.pattern)
+			matchesString := []string{}
+			for _, item := range matches {
+				matchesString = append(matchesString, string(item))
+			}
+
+			if !stringSliceEqual(matchesString, item.matches) {
+				t.Errorf("Expected to find these matches: %v, got: %v", item.matches, matchesString)
+			}
+		})
+	}
+}
+
+func TestAnchor(t *testing.T) {
+	data := []Data{
+		{
+			pattern: "^12",
+			input:   "123",
+			matches: []string{"12"},
+		},
+		{
+			pattern: "^123",
+			input:   "234",
+			matches: []string{},
+		},
+		{
+			pattern: "^12$",
+			input:   "123",
+			matches: []string{},
+		},
+		{
+			pattern: "^12$",
+			input:   "12",
+			matches: []string{"12"},
+		},
+		{
+			pattern: "^log",
+			input:   "slog",
+			matches: []string{},
+		},
+	}
+
+	for _, item := range data {
+		t.Run(fmt.Sprintf("Checking input %v, for pattern %v", item.input, item.pattern), func(t *testing.T) {
+			matches, _, _ := matchLine([]byte(item.input), item.pattern)
 			matchesString := []string{}
 			for _, item := range matches {
 				matchesString = append(matchesString, string(item))

@@ -43,7 +43,7 @@ func cli() {
 		os.Exit(2)
 	}
 
-	matches, err := matchLine(line, pattern)
+	matches, _, err := matchLine(line, pattern)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "error: %v\n", err)
 		os.Exit(2)
@@ -54,26 +54,21 @@ func cli() {
 	}
 
 }
-func matchLineDetails(line []byte, pattern string) ([][]byte, NFA, error) {
+
+func matchLine(line []byte, pattern string) ([][]byte, NFA, error) {
 	parser := Parser{conversion: Conversion{}, pattern: pattern, pos: 0}
 	nfa, err := parser.parse()
 
 	fmt.Fprintln(os.Stderr, "Logs from your program will appear here!")
 
-	matches := nfa.findAllMatches(line)
+	isStartAnchor := false
+	if len(pattern) > 0 && pattern[0] == '^' {
+		isStartAnchor = true
+	}
+
+	matches := nfa.findAllMatches(line, isStartAnchor)
 
 	return matches, nfa, err
-}
-
-func matchLine(line []byte, pattern string) ([][]byte, error) {
-	parser := Parser{conversion: Conversion{}, pattern: pattern, pos: 0}
-	nfa, err := parser.parse()
-
-	fmt.Fprintln(os.Stderr, "Logs from your program will appear here!")
-
-	matches := nfa.findAllMatches(line)
-
-	return matches, err
 }
 
 type NFATransition struct {
@@ -124,6 +119,20 @@ func (n *NFA) addTransition(from State, to State, matcher Matcher) error {
 	return nil
 }
 
+func (n *NFA) addTransitionPrio(from State, to State, matcher Matcher) error {
+
+	fromState, ok := n.states[from.name]
+	if !ok {
+		return fmt.Errorf("could find state from")
+	}
+
+	fromState.transitions = append([]NFATransition{{to: to.name, matcher: matcher}}, fromState.transitions...)
+
+	n.states[from.name] = fromState
+
+	return nil
+}
+
 func (n *NFA) setInitState(state State) {
 	n.initState = state.name
 }
@@ -155,20 +164,21 @@ type Stack struct {
 	data []StackData
 }
 
-func (n *NFA) run(line []byte) (bool, []byte) {
+func (n *NFA) run(line []byte, index int) (bool, []byte, int) {
 	stack := Stack{}
 	stack.push(n.states[n.initState], 0)
+	line = line[index:]
 
 	for stack.length() > 0 {
 		item := stack.pop()
 		if item.currentState.isFinal {
-			return true, line[:item.i]
+			return true, line[:item.i], index + item.i
 		}
 
 		for _, transition := range item.currentState.transitions {
-			if item.i < len(line) && transition.matcher.match(line[item.i]) {
+			if (item.i < len(line) || transition.matcher.isEpsilon()) && transition.matcher.match(line, item.i) {
 				newIndex := item.i
-				if !transition.isEpsilon {
+				if !transition.matcher.isEpsilon() {
 					newIndex += 1
 				}
 				toState := n.states[transition.to]
@@ -176,15 +186,28 @@ func (n *NFA) run(line []byte) (bool, []byte) {
 			}
 		}
 	}
-	return false, nil
+	return false, nil, 0
 }
 
-func (n *NFA) findAllMatches(input []byte) [][]byte {
+func (n *NFA) findAllMatches(input []byte, isStartAnchor bool) [][]byte {
 	matches := [][]byte{}
-	for i := 0; i < len(input); i++ {
-		ok, match := n.run(input[i:])
+	counter := 0
+	i := 0
+	for i < len(input) {
+		counter++
+		if counter > 20 {
+			break
+		}
+		if i > 0 && isStartAnchor {
+			continue
+		}
+		ok, match, index := n.run(input, i)
+
 		if ok {
 			matches = append(matches, match)
+			i = index
+		} else {
+			i++
 		}
 
 	}
@@ -336,7 +359,51 @@ func (p *Parser) parseRepeat() (NFA, error) {
 		return leftAtom, err
 	}
 
+	c := p.pattern[p.pos]
+
+	switch c {
+	case '+':
+		/*
+					   ┌────────ε───────┐
+					   │         		│
+			(q1) -ε> (q2) -condition-> (q3) -ε> ((q4))
+		*/
+
+		// Create start state q1
+		// create end state q4
+
+		// q2 -> q3 - leftAtom is nfa contains information about all states
+
+		// add epsilion transition from q1 to q2
+		// add episliton transiton from q3 to q4
+
+		// add epsilion transition from q3 to q2
+
+		// by default we use greedy matcher so, always prioritize going into loop (epsilion transition from q3 to q2)
+
+		q1 := NewState()
+		q4 := NewState()
+		q4.isFinal = true
+
+		// nfa := NFA{states: map[string]State{}}
+		leftAtom.addStates([]State{q1, q4})
+		currentInitState := leftAtom.initState
+		leftAtom.setInitState(q1)
+		leftAtom.addTransition(q1, leftAtom.states[currentInitState], EpsilonMatcher{})
+		leftAtom.addTransition(leftAtom.states[leftAtom.endStates[0]], q4, EpsilonMatcher{})
+		// Gready so prioritize this one,
+		leftAtom.addTransitionPrio(leftAtom.states[leftAtom.endStates[0]], leftAtom.states[currentInitState], EpsilonMatcher{})
+
+		last := leftAtom.states[leftAtom.endStates[0]]
+		last.isFinal = false
+		leftAtom.states[leftAtom.endStates[0]] = last
+
+		leftAtom.setFinalStates([]State{q4})
+		p.pos++
+	}
+
 	return leftAtom, err
+
 	// rightAtom, err := p.parseAtom()
 
 	// leftAtom.appendNfa(rightAtom, leftAtom.endStates[0])
@@ -350,8 +417,11 @@ func (p *Parser) parseAtom() (NFA, error) {
 		return p.parseEscape()
 	case '[':
 		return p.parseCharGroup()
+	case '^':
+		return p.parseCaretAnchor()
+	case '$':
+		return p.parseDollarAnchor()
 	default:
-
 		return p.parseLiteral()
 	}
 }
@@ -366,7 +436,7 @@ func (p *Parser) parseEscape() (NFA, error) {
 	case 'w':
 		return p.conversion.oneStepNFA(NewWordMatcher())
 	default:
-		return NFA{}, fmt.Errorf("unsupported escape: \\%c", esc)
+		return p.parseLiteral()
 	}
 }
 
@@ -427,6 +497,18 @@ func (p *Parser) parseLiteral() (NFA, error) {
 	return p.conversion.oneStepNFA(matcher)
 }
 
+func (p *Parser) parseDollarAnchor() (NFA, error) {
+	matcher := EndOfStringMatcher{}
+	p.pos++
+	return p.conversion.oneStepNFA(matcher)
+}
+
+func (p *Parser) parseCaretAnchor() (NFA, error) {
+	matcher := StartOfStringMatcher{}
+	p.pos++
+	return p.conversion.oneStepNFA(matcher)
+}
+
 // ------------------ Stack ------------------
 
 func (s *Stack) push(state State, i int) {
@@ -447,23 +529,44 @@ func (s Stack) length() int {
 // ------------------ Matcher ------------------
 
 type Matcher interface {
-	match(b byte) bool
+	match(b []byte, index int) bool
+	isEpsilon() bool
+}
+
+type EpsilonMatcher struct {
+	char byte
+}
+
+func (lm EpsilonMatcher) match(b []byte, index int) bool {
+	return true
+}
+
+func (lm EpsilonMatcher) isEpsilon() bool {
+	return true
 }
 
 type LiteralMatcher struct {
 	char byte
 }
 
-func (lm LiteralMatcher) match(b byte) bool {
-	return lm.char == b
+func (lm LiteralMatcher) match(b []byte, index int) bool {
+	return lm.char == b[index]
+}
+
+func (lm LiteralMatcher) isEpsilon() bool {
+	return false
 }
 
 type DigitMatcher struct {
 	ranges []CharRange
 }
 
-func (dm DigitMatcher) match(b byte) bool {
-	return matchRanges(dm.ranges, b)
+func (dm DigitMatcher) match(b []byte, index int) bool {
+	return matchRanges(dm.ranges, b[index])
+}
+
+func (dm DigitMatcher) isEpsilon() bool {
+	return false
 }
 
 func NewDigitMatcher() WordMatcher {
@@ -477,8 +580,12 @@ type WordMatcher struct {
 	chars  []byte
 }
 
-func (wm WordMatcher) match(b byte) bool {
-	return matchRanges(wm.ranges, b) || matchChars(wm.chars, b)
+func (wm WordMatcher) match(b []byte, index int) bool {
+	return matchRanges(wm.ranges, b[index]) || matchChars(wm.chars, b[index])
+}
+
+func (wm WordMatcher) isEpsilon() bool {
+	return false
 }
 
 var (
@@ -513,14 +620,18 @@ type CharacterGroupMatcher struct {
 	label      string
 }
 
-func (cgm CharacterGroupMatcher) match(b byte) bool {
-	base := matchChars(cgm.chars, b) || matchRanges(cgm.ranges, b)
+func (cgm CharacterGroupMatcher) match(b []byte, index int) bool {
+	base := matchChars(cgm.chars, b[index]) || matchRanges(cgm.ranges, b[index])
 
 	if cgm.isNegative {
 		return !base
 	}
 
 	return base
+}
+
+func (lm CharacterGroupMatcher) isEpsilon() bool {
+	return false
 }
 
 func NewCharacterGroupMatcher(ranges []CharRange, chars []byte, isNegative bool, label string) CharacterGroupMatcher {
@@ -543,4 +654,25 @@ func matchRanges(ranges []CharRange, b byte) bool {
 
 func matchChars(chars []byte, b byte) bool {
 	return slices.Contains(chars, b)
+}
+
+type StartOfStringMatcher struct{}
+
+func (startOfStringMatcher StartOfStringMatcher) match(b []byte, index int) bool {
+	return index == 0
+}
+
+func (lm StartOfStringMatcher) isEpsilon() bool {
+	return true
+}
+
+type EndOfStringMatcher struct{}
+
+func (endOfStringMatcher EndOfStringMatcher) match(b []byte, index int) bool {
+
+	return len(b) == index
+}
+
+func (lm EndOfStringMatcher) isEpsilon() bool {
+	return true
 }

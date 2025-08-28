@@ -38,7 +38,7 @@ func webServer() {
 		if r.Method == "POST" {
 			regex := r.FormValue("regex")
 			text := r.FormValue("text")
-			matches, nfa, err := matchLineDetails([]byte(text), regex)
+			matches, nfa, err := matchLine([]byte(text), regex)
 			if err != nil {
 				log.Fatal(err)
 			}
@@ -95,6 +95,9 @@ func convertNFAToData(nfa NFA) NFAData {
 }
 
 func getMatcherLabel(matcher Matcher) string {
+	if matcher.isEpsilon() {
+		return "ε"
+	}
 	switch m := matcher.(type) {
 	case LiteralMatcher:
 		return string(m.char)
