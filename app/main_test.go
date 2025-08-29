@@ -252,3 +252,71 @@ func TestAnchor(t *testing.T) {
 		})
 	}
 }
+
+func TestPlus(t *testing.T) {
+	data := []Data{
+		{
+			pattern: "a+",
+			input:   "aaaa",
+			matches: []string{"aaaa"},
+		},
+		{
+			pattern: "ca+t",
+			input:   "caat",
+			matches: []string{"caat"},
+		},
+		{
+			pattern: "ca+t",
+			input:   "caart",
+			matches: []string{},
+		},
+	}
+
+	for _, item := range data {
+		t.Run(fmt.Sprintf("Checking input %v, for pattern %v", item.input, item.pattern), func(t *testing.T) {
+			matches, _, _ := matchLine([]byte(item.input), item.pattern)
+			matchesString := []string{}
+			for _, item := range matches {
+				matchesString = append(matchesString, string(item))
+			}
+
+			if !stringSliceEqual(matchesString, item.matches) {
+				t.Errorf("Expected to find these matches: %v, got: %v", item.matches, matchesString)
+			}
+		})
+	}
+}
+
+func TestQuestionmark(t *testing.T) {
+	data := []Data{
+		{
+			pattern: "a?",
+			input:   "aaaa",
+			matches: []string{"a", "a", "a", "a"},
+		},
+		{
+			pattern: "a?b",
+			input:   "b",
+			matches: []string{"b"},
+		},
+		{
+			pattern: "a?c",
+			input:   "b",
+			matches: []string{},
+		},
+	}
+
+	for _, item := range data {
+		t.Run(fmt.Sprintf("Checking input %v, for pattern %v", item.input, item.pattern), func(t *testing.T) {
+			matches, _, _ := matchLine([]byte(item.input), item.pattern)
+			matchesString := []string{}
+			for _, item := range matches {
+				matchesString = append(matchesString, string(item))
+			}
+
+			if !stringSliceEqual(matchesString, item.matches) {
+				t.Errorf("Expected to find these matches: %v, got: %v", item.matches, matchesString)
+			}
+		})
+	}
+}

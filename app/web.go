@@ -44,6 +44,19 @@ func webServer() {
 			}
 
 			nfaData := convertNFAToData(nfa)
+			
+			// Debug: Print NFA structure to terminal
+			fmt.Printf("=== NFA DEBUG (regex: %s) ===\n", regex)
+			fmt.Printf("Init State: %s\n", nfaData.InitState)
+			fmt.Println("ALL STATES:")
+			for stateName, state := range nfaData.States {
+				fmt.Printf("State %s: isFinal=%t, transitions=%d\n", stateName, state.IsFinal, len(state.Transitions))
+				for _, t := range state.Transitions {
+					fmt.Printf("  -> %s (label: \"%s\", epsilon: %t)\n", t.To, t.Label, t.IsEpsilon)
+				}
+			}
+			fmt.Println("===================")
+			
 			nfaJson, _ := json.Marshal(nfaData)
 			data := WebData{
 				Regex:   regex,
@@ -77,7 +90,7 @@ func convertNFAToData(nfa NFA) NFAData {
 			transitions[i] = TransitionData{
 				To:        trans.to,
 				Label:     label,
-				IsEpsilon: trans.isEpsilon,
+				IsEpsilon: trans.matcher.isEpsilon(),
 			}
 		}
 

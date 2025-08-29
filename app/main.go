@@ -72,9 +72,8 @@ func matchLine(line []byte, pattern string) ([][]byte, NFA, error) {
 }
 
 type NFATransition struct {
-	to        string
-	matcher   Matcher
-	isEpsilon bool
+	to      string
+	matcher Matcher
 }
 
 type NFA struct {
@@ -168,14 +167,14 @@ func (n *NFA) run(line []byte, index int) (bool, []byte, int) {
 	stack := Stack{}
 	stack.push(n.states[n.initState], 0)
 	line = line[index:]
-
 	for stack.length() > 0 {
 		item := stack.pop()
 		if item.currentState.isFinal {
 			return true, line[:item.i], index + item.i
 		}
 
-		for _, transition := range item.currentState.transitions {
+		for i := len(item.currentState.transitions) - 1; i >= 0; i-- {
+			transition := item.currentState.transitions[i]
 			if (item.i < len(line) || transition.matcher.isEpsilon()) && transition.matcher.match(line, item.i) {
 				newIndex := item.i
 				if !transition.matcher.isEpsilon() {
@@ -364,35 +363,62 @@ func (p *Parser) parseRepeat() (NFA, error) {
 	switch c {
 	case '+':
 		/*
-					   ┌────────ε───────┐
-					   │         		│
+					  ┌────────ε────────┐
+					  ▼          	    │
 			(q1) -ε> (q2) -condition-> (q3) -ε> ((q4))
+
+			1. Create start state q1
+			2. Create end state q4
+			3. Add epsilon transition from q1 to q2
+			4. Add epsilon transition from q3 to q2 (loop repetition), by default it's greedy so prioritize it rather than exit the loop
+			5. Add epsilon transition from q3 to q4
+
 		*/
-
-		// Create start state q1
-		// create end state q4
-
-		// q2 -> q3 - leftAtom is nfa contains information about all states
-
-		// add epsilion transition from q1 to q2
-		// add episliton transiton from q3 to q4
-
-		// add epsilion transition from q3 to q2
-
-		// by default we use greedy matcher so, always prioritize going into loop (epsilion transition from q3 to q2)
 
 		q1 := NewState()
 		q4 := NewState()
 		q4.isFinal = true
 
-		// nfa := NFA{states: map[string]State{}}
 		leftAtom.addStates([]State{q1, q4})
 		currentInitState := leftAtom.initState
 		leftAtom.setInitState(q1)
 		leftAtom.addTransition(q1, leftAtom.states[currentInitState], EpsilonMatcher{})
+		// Greedy matcher, need to be added first
+		leftAtom.addTransition(leftAtom.states[leftAtom.endStates[0]], leftAtom.states[currentInitState], EpsilonMatcher{})
 		leftAtom.addTransition(leftAtom.states[leftAtom.endStates[0]], q4, EpsilonMatcher{})
-		// Gready so prioritize this one,
-		leftAtom.addTransitionPrio(leftAtom.states[leftAtom.endStates[0]], leftAtom.states[currentInitState], EpsilonMatcher{})
+
+		last := leftAtom.states[leftAtom.endStates[0]]
+		last.isFinal = false
+		leftAtom.states[leftAtom.endStates[0]] = last
+
+		leftAtom.setFinalStates([]State{q4})
+		p.pos++
+	case '?':
+		/*
+
+			(q1) -ε> (q2) -condition-> (q3) -ε> ((q4))
+			  │                                    ▲
+			  └────────────────ε───────────────────┘
+
+			1. Create start state q1
+			2. Create end state q4
+			3. Add epsilon transition from q1 to q2
+			4. Add epsilon transition from q1 to q4 (exit), by default it's greedy so prioritize entering condition
+			5. Add epsilon transition from q3 to q4
+
+		*/
+
+		q1 := NewState()
+		q4 := NewState()
+		q4.isFinal = true
+
+		leftAtom.addStates([]State{q1, q4})
+		currentInitState := leftAtom.initState
+		leftAtom.setInitState(q1)
+		leftAtom.addTransition(q1, leftAtom.states[currentInitState], EpsilonMatcher{})
+		leftAtom.addTransition(q1, q4, EpsilonMatcher{})
+		// Greedy matcher, need to be added first
+		leftAtom.addTransition(leftAtom.states[leftAtom.endStates[0]], q4, EpsilonMatcher{})
 
 		last := leftAtom.states[leftAtom.endStates[0]]
 		last.isFinal = false
@@ -403,12 +429,6 @@ func (p *Parser) parseRepeat() (NFA, error) {
 	}
 
 	return leftAtom, err
-
-	// rightAtom, err := p.parseAtom()
-
-	// leftAtom.appendNfa(rightAtom, leftAtom.endStates[0])
-
-	// return leftAtom, err
 }
 
 func (p *Parser) parseAtom() (NFA, error) {

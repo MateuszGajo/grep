@@ -1,54 +1,45 @@
 <!DOCTYPE html>
 <html>
-
 <head>
-    <title>Regex Matcher</title>
+    <title>NFA Visualizer</title>
     <style>
         body {
             font-family: Arial, sans-serif;
             margin: 20px;
         }
-
         form {
             margin-bottom: 20px;
         }
-
         input[type="text"] {
             width: 300px;
             padding: 5px;
             margin: 5px;
         }
-
         input[type="submit"] {
             padding: 8px 16px;
         }
-
         .results {
             display: flex;
             gap: 20px;
         }
-
-        .matches,
-        .fsm {
+        .matches, .fsm {
             border: 1px solid #ccc;
             padding: 10px;
             min-width: 300px;
         }
-
-        #fsm-canvas {
+        #nfa-canvas {
             border: 1px solid #000;
             background: white;
         }
     </style>
 </head>
-
 <body>
-    <h1>Regex Matcher</h1>
+    <h1>NFA State Graph Visualizer</h1>
 
     <form method="POST">
         <label>Regex: <input type="text" name="regex" value="{{ .Regex }}"></label><br>
         <label>Text: <input type="text" name="text" value="{{ .Text }}"></label><br>
-        <input type="submit" value="Match">
+        <input type="submit" value="Generate NFA">
     </form>
 
     {{ if .Matches }}
@@ -60,8 +51,8 @@
         </div>
 
         <div class="fsm">
-            <h2>FSM:</h2>
-            <canvas id="fsm-canvas" width="400" height="300"></canvas>
+            <h2>NFA State Graph:</h2>
+            <canvas id="nfa-canvas" width="800" height="600"></canvas>
         </div>
     </div>
     {{ end }}
@@ -69,81 +60,216 @@
     <script>
         const nfaData = {{if .NFAJson}}{{.NFAJson}}{{else}}null{{end}};
 
-        function drawFSM() {
-            const canvas = document.getElementById('fsm-canvas');
+        function visualizeNFA() {
+            const canvas = document.getElementById('nfa-canvas');
             if (!canvas || !nfaData) return;
 
             const ctx = canvas.getContext('2d');
             ctx.clearRect(0, 0, canvas.width, canvas.height);
 
-            const states = Object.keys(nfaData.states);
-            const positions = {};
+            console.log('=== NFA VISUALIZATION ===');
+            console.log('NFA Data:', nfaData);
 
-            // Position states in a simple horizontal line
-            states.forEach((state, i) => {
-                positions[state] = {
-                    x: 50 + i * 100,
-                    y: 150
+            // Step 1: Calculate state positions starting from initState
+            const stateOrder = [];
+            const visited = new Set();
+            const queue = [nfaData.initState];
+            
+            // BFS to get proper state order starting from initState
+            while (queue.length > 0) {
+                const currentState = queue.shift();
+                if (visited.has(currentState)) continue;
+                
+                visited.add(currentState);
+                stateOrder.push(currentState);
+                
+                // Add transitions to queue
+                const state = nfaData.states[currentState];
+                if (state) {
+                    state.transitions.forEach(trans => {
+                        if (!visited.has(trans.to)) {
+                            queue.push(trans.to);
+                        }
+                    });
+                }
+            }
+            
+            // Add any remaining states not reachable from initState
+            Object.keys(nfaData.states).forEach(stateName => {
+                if (!visited.has(stateName)) {
+                    stateOrder.push(stateName);
+                }
+            });
+
+            const positions = {};
+            const spacing = 100;
+            const startY = 80;
+
+            stateOrder.forEach((stateName, index) => {
+                positions[stateName] = {
+                    x: canvas.width / 2,
+                    y: startY + (index * spacing)
                 };
             });
 
-            // Draw transitions (arrows)
-            Object.values(nfaData.states).forEach(state => {
-                state.transitions.forEach(trans => {
-                    const from = positions[state.name];
-                    const to = positions[trans.to];
-                    if (from && to) {
-                        // Draw arrow
-                        ctx.beginPath();
-                        ctx.moveTo(from.x + 20, from.y);
-                        ctx.lineTo(to.x - 20, to.y);
-                        ctx.stroke();
+            console.log('State positions:', positions);
 
-                        // Arrow head
-                        ctx.beginPath();
-                        ctx.moveTo(to.x - 20, to.y);
-                        ctx.lineTo(to.x - 25, to.y - 5);
-                        ctx.moveTo(to.x - 20, to.y);
-                        ctx.lineTo(to.x - 25, to.y + 5);
-                        ctx.stroke();
+            // Step 2: Draw all transitions
+            Object.entries(nfaData.states).forEach(([fromState, stateData]) => {
+                stateData.transitions.forEach(transition => {
+                    const from = positions[fromState];
+                    const to = positions[transition.to];
+                    
+                    if (!from || !to) return;
 
-                        // Label
-                        const midX = (from.x + to.x) / 2;
-                        const midY = (from.y + to.y) / 2 - 10;
-                        ctx.fillText(trans.label, midX, midY);
+                    console.log(`Drawing transition: ${fromState} -> ${transition.to} (${transition.label})`);
+
+                    // Determine if this is a backward transition
+                    const fromIndex = stateOrder.indexOf(fromState);
+                    const toIndex = stateOrder.indexOf(transition.to);
+                    const isBackward = toIndex < fromIndex;
+
+                    ctx.strokeStyle = 'black';
+                    ctx.lineWidth = 1;
+                    ctx.fillStyle = 'black';
+
+                    if (fromState === transition.to) {
+                        // Self-loop
+                        drawSelfLoop(ctx, from, transition.label);
+                    } else if (isBackward) {
+                        // Backward transition - curved to the right
+                        drawBackwardTransition(ctx, from, to, transition.label, fromState, transition.to);
+                    } else {
+                        // Forward transition - straight line
+                        drawForwardTransition(ctx, from, to, transition.label);
                     }
                 });
             });
 
-            // Draw states (circles)
-            states.forEach(stateName => {
-                const pos = positions[stateName];
+            // Step 3: Draw states on top
+            Object.entries(positions).forEach(([stateName, pos]) => {
                 const state = nfaData.states[stateName];
-
-                // Circle
-                ctx.beginPath();
-                ctx.arc(pos.x, pos.y, 20, 0, 2 * Math.PI);
-                ctx.fillStyle = state.isFinal ? '#ffcccc' : '#ccccff';
-                if (stateName === nfaData.initState) ctx.fillStyle = '#ccffcc';
-                ctx.fill();
-                ctx.stroke();
-
-                // Double circle for final states
-                if (state.isFinal) {
-                    ctx.beginPath();
-                    ctx.arc(pos.x, pos.y, 15, 0, 2 * Math.PI);
-                    ctx.stroke();
-                }
-
-                // State name
-                ctx.fillStyle = 'black';
-                ctx.textAlign = 'center';
-                ctx.fillText(stateName, pos.x, pos.y + 5);
+                drawState(ctx, pos, stateName, state.isFinal, stateName === nfaData.initState);
             });
         }
 
-        window.onload = drawFSM;
+        function drawState(ctx, pos, name, isFinal, isInit) {
+            // Draw circle
+            ctx.beginPath();
+            ctx.arc(pos.x, pos.y, 25, 0, 2 * Math.PI);
+            
+            // Color coding
+            if (isInit) {
+                ctx.fillStyle = '#90EE90'; // Light green for initial
+            } else if (isFinal) {
+                ctx.fillStyle = '#FFB6C1'; // Light pink for final
+            } else {
+                ctx.fillStyle = '#ADD8E6'; // Light blue for normal
+            }
+            
+            ctx.fill();
+            ctx.strokeStyle = 'black';
+            ctx.lineWidth = 2;
+            ctx.stroke();
+
+            // Double circle for final states
+            if (isFinal) {
+                ctx.beginPath();
+                ctx.arc(pos.x, pos.y, 20, 0, 2 * Math.PI);
+                ctx.stroke();
+            }
+
+            // State name
+            ctx.fillStyle = 'black';
+            ctx.font = '14px Arial';
+            ctx.textAlign = 'center';
+            ctx.fillText(name, pos.x, pos.y + 4);
+        }
+
+        function drawForwardTransition(ctx, from, to, label) {
+            // Straight arrow
+            const angle = Math.atan2(to.y - from.y, to.x - from.x);
+            const startX = from.x + 25 * Math.cos(angle);
+            const startY = from.y + 25 * Math.sin(angle);
+            const endX = to.x - 25 * Math.cos(angle);
+            const endY = to.y - 25 * Math.sin(angle);
+
+            ctx.beginPath();
+            ctx.moveTo(startX, startY);
+            ctx.lineTo(endX, endY);
+            ctx.stroke();
+
+            // Arrowhead
+            drawArrowhead(ctx, endX, endY, angle);
+
+            // Label
+            const midX = (startX + endX) / 2;
+            const midY = (startY + endY) / 2;
+            ctx.fillStyle = 'blue';
+            ctx.font = '12px Arial';
+            ctx.textAlign = 'center';
+            ctx.fillText(label, midX - 15, midY);
+        }
+
+        function drawBackwardTransition(ctx, from, to, label, fromState, toState) {
+            // Curved arrow to the right side
+            const controlX = Math.max(from.x, to.x) + 150;
+            const controlY = (from.y + to.y) / 2;
+
+            ctx.beginPath();
+            ctx.moveTo(from.x + 25, from.y);
+            ctx.quadraticCurveTo(controlX, controlY, to.x + 25, to.y);
+            
+            // Highlight q2->q1 in red
+            if (fromState === 'q2' && toState === 'q1') {
+                ctx.strokeStyle = 'red';
+                ctx.lineWidth = 3;
+                console.log('DRAWING Q2->Q1 BACKWARD ARROW IN RED');
+            } else {
+                ctx.strokeStyle = 'purple';
+                ctx.lineWidth = 2;
+            }
+            
+            ctx.stroke();
+
+            // Arrowhead at end
+            const angle = Math.atan2(to.y - controlY, to.x + 25 - controlX);
+            drawArrowhead(ctx, to.x + 25, to.y, angle);
+
+            // Label on curve
+            ctx.fillStyle = fromState === 'q2' && toState === 'q1' ? 'red' : 'purple';
+            ctx.font = '12px Arial';
+            ctx.textAlign = 'center';
+            ctx.fillText(label, controlX, controlY);
+        }
+
+        function drawSelfLoop(ctx, pos, label) {
+            // Self-loop above the state
+            ctx.beginPath();
+            ctx.arc(pos.x, pos.y - 40, 15, 0, Math.PI, true);
+            ctx.stroke();
+
+            // Arrowhead
+            drawArrowhead(ctx, pos.x - 15, pos.y - 40, Math.PI);
+
+            // Label
+            ctx.fillStyle = 'green';
+            ctx.font = '12px Arial';
+            ctx.textAlign = 'center';
+            ctx.fillText(label, pos.x, pos.y - 65);
+        }
+
+        function drawArrowhead(ctx, x, y, angle) {
+            const headLength = 10;
+            ctx.beginPath();
+            ctx.moveTo(x, y);
+            ctx.lineTo(x - headLength * Math.cos(angle - Math.PI / 6), y - headLength * Math.sin(angle - Math.PI / 6));
+            ctx.moveTo(x, y);
+            ctx.lineTo(x - headLength * Math.cos(angle + Math.PI / 6), y - headLength * Math.sin(angle + Math.PI / 6));
+            ctx.stroke();
+        }
+
+        window.onload = visualizeNFA;
     </script>
 </body>
-
 </html>
