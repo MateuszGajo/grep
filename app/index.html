@@ -112,7 +112,6 @@
                 };
             });
 
-            console.log('State positions:', positions);
 
             // Step 2: Draw all transitions
             Object.entries(nfaData.states).forEach(([fromState, stateData]) => {
@@ -123,7 +122,7 @@
                     if (!from || !to) return;
 
                     console.log(`Drawing transition: ${fromState} -> ${transition.to} (${transition.label})`);
-
+                    
                     // Determine if this is a backward transition
                     const fromIndex = stateOrder.indexOf(fromState);
                     const toIndex = stateOrder.indexOf(transition.to);

@@ -44,7 +44,7 @@ func webServer() {
 			}
 
 			nfaData := convertNFAToData(nfa)
-			
+
 			// Debug: Print NFA structure to terminal
 			fmt.Printf("=== NFA DEBUG (regex: %s) ===\n", regex)
 			fmt.Printf("Init State: %s\n", nfaData.InitState)
@@ -56,7 +56,7 @@ func webServer() {
 				}
 			}
 			fmt.Println("===================")
-			
+
 			nfaJson, _ := json.Marshal(nfaData)
 			data := WebData{
 				Regex:   regex,
@@ -120,6 +120,8 @@ func getMatcherLabel(matcher Matcher) string {
 		return "\\w"
 	case CharacterGroupMatcher:
 		return m.label
+	case AnyCharMatcher:
+		return "."
 	default:
 		return "?"
 	}

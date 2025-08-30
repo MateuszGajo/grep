@@ -441,9 +441,17 @@ func (p *Parser) parseAtom() (NFA, error) {
 		return p.parseCaretAnchor()
 	case '$':
 		return p.parseDollarAnchor()
+	case '.':
+		return p.parseDot()
 	default:
 		return p.parseLiteral()
 	}
+}
+
+func (p *Parser) parseDot() (NFA, error) {
+	matcher := AnyCharMatcher{}
+	p.pos++
+	return p.conversion.oneStepNFA(matcher)
 }
 
 func (p *Parser) parseEscape() (NFA, error) {
@@ -695,4 +703,14 @@ func (endOfStringMatcher EndOfStringMatcher) match(b []byte, index int) bool {
 
 func (lm EndOfStringMatcher) isEpsilon() bool {
 	return true
+}
+
+type AnyCharMatcher struct{}
+
+func (anyCharMatcher AnyCharMatcher) match(b []byte, index int) bool {
+	return true
+}
+
+func (anyCharMatcher AnyCharMatcher) isEpsilon() bool {
+	return false
 }

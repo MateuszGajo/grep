@@ -320,3 +320,42 @@ func TestQuestionmark(t *testing.T) {
 		})
 	}
 }
+
+func TestDot(t *testing.T) {
+	data := []Data{
+		{
+			pattern: "a.b",
+			input:   "aab",
+			matches: []string{"aab"},
+		},
+		{
+			pattern: "a.",
+			input:   "aa",
+			matches: []string{"aa"},
+		},
+		{
+			pattern: "a.",
+			input:   "b",
+			matches: []string{},
+		},
+		{
+			pattern: "a.+",
+			input:   "accc",
+			matches: []string{"accc"},
+		},
+	}
+
+	for _, item := range data {
+		t.Run(fmt.Sprintf("Checking input %v, for pattern %v", item.input, item.pattern), func(t *testing.T) {
+			matches, _, _ := matchLine([]byte(item.input), item.pattern)
+			matchesString := []string{}
+			for _, item := range matches {
+				matchesString = append(matchesString, string(item))
+			}
+
+			if !stringSliceEqual(matchesString, item.matches) {
+				t.Errorf("Expected to find these matches: %v, got: %v", item.matches, matchesString)
+			}
+		})
+	}
+}
