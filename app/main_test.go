@@ -359,3 +359,37 @@ func TestDot(t *testing.T) {
 		})
 	}
 }
+
+func TestGroup(t *testing.T) {
+	data := []Data{
+		{
+			pattern: "(a+)",
+			input:   "aaa",
+			matches: []string{"aaa"},
+		},
+		{
+			pattern: "(a)",
+			input:   "a",
+			matches: []string{"a"},
+		},
+		{
+			pattern: "(b)",
+			input:   "a",
+			matches: []string{},
+		},
+	}
+
+	for _, item := range data {
+		t.Run(fmt.Sprintf("Checking input %v, for pattern %v", item.input, item.pattern), func(t *testing.T) {
+			matches, _, _ := matchLine([]byte(item.input), item.pattern)
+			matchesString := []string{}
+			for _, item := range matches {
+				matchesString = append(matchesString, string(item))
+			}
+
+			if !stringSliceEqual(matchesString, item.matches) {
+				t.Errorf("Expected to find these matches: %v, got: %v", item.matches, matchesString)
+			}
+		})
+	}
+}

@@ -118,20 +118,6 @@ func (n *NFA) addTransition(from State, to State, matcher Matcher) error {
 	return nil
 }
 
-func (n *NFA) addTransitionPrio(from State, to State, matcher Matcher) error {
-
-	fromState, ok := n.states[from.name]
-	if !ok {
-		return fmt.Errorf("could find state from")
-	}
-
-	fromState.transitions = append([]NFATransition{{to: to.name, matcher: matcher}}, fromState.transitions...)
-
-	n.states[from.name] = fromState
-
-	return nil
-}
-
 func (n *NFA) setInitState(state State) {
 	n.initState = state.name
 }
@@ -334,12 +320,38 @@ func (p Parser) isNextEnd() bool {
 }
 
 func (p *Parser) parse() (NFA, error) {
+	return p.parseAlternation()
+}
+
+func (p *Parser) parseAlternation() (NFA, error) {
+	// 	          ε                ε
+	//       +-------> ( N(s) ) ------->+
+	//       |          	            |
+	//   -->(q1)                       (q2)<--
+	//       |         	 	            |
+	//       +-------> ( N(t) ) ------->+
+	//           ε                ε
+
+	// 1. Create a new start state q1
+	// 2. Add epsilon transition to starting point of left alternation
+	// 3. Add epsilion transition to starting point of right alternation
+	// 4. Create end state q2
+	// 5. Add epsilon transition from ending state of left alternation to end state
+	// 6. Add epsilon transition from ending state or right alternation to end state
+	// 7. Remove end state from left and right alternation
+
+	left, err := p.parseConcatenation()
+
+	return left, err
+}
+
+func (p *Parser) parseConcatenation() (NFA, error) {
 	stateCounter = 0
 	left, err := p.parseRepeat()
 	if err != nil {
 		return NFA{}, err
 	}
-	for !p.isEnd() {
+	for !p.isEnd() && p.pattern[p.pos] != ')' {
 		right, err := p.parseRepeat()
 		if err != nil {
 			return NFA{}, err
@@ -436,16 +448,57 @@ func (p *Parser) parseAtom() (NFA, error) {
 	case '\\':
 		return p.parseEscape()
 	case '[':
-		return p.parseCharGroup()
+		return p.parseCharClass()
 	case '^':
 		return p.parseCaretAnchor()
 	case '$':
 		return p.parseDollarAnchor()
 	case '.':
 		return p.parseDot()
+	case '(':
+		return p.parseGroup()
 	default:
 		return p.parseLiteral()
 	}
+}
+
+func (p *Parser) parseGroup() (NFA, error) {
+
+	//   -->(q1) ------->   ( N(s) )    ------->   (q2)
+	// 1. Add new start state (q1)
+	// 2. Add end state (q2)
+	// 3. Add eppsilon transition from q1 to init state of N(s)
+	// 4. Add epsilon transition from ending states of N(s) to q2
+
+	p.pos++
+	nfa, err := p.parseAlternation()
+	if p.pattern[p.pos] != ')' {
+		return NFA{}, fmt.Errorf("invalid pattern missing closing bracket )")
+	}
+	p.pos++
+
+	start := NewState()
+	end := NewState()
+	end.isFinal = true
+
+	nfa.addStates([]State{start, end})
+
+	initState := nfa.initState
+	endStates := nfa.endStates
+	nfa.setInitState(start)
+	nfa.setFinalStates([]State{end})
+
+	nfa.addTransition(start, nfa.states[initState], EpsilonMatcher{})
+	for _, item := range endStates {
+		nfa.addTransition(nfa.states[item], end, EpsilonMatcher{})
+		state := nfa.states[item]
+
+		state.isFinal = false
+		nfa.states[item] = state
+	}
+
+	return nfa, err
+
 }
 
 func (p *Parser) parseDot() (NFA, error) {
@@ -468,7 +521,7 @@ func (p *Parser) parseEscape() (NFA, error) {
 	}
 }
 
-func (p *Parser) parseCharGroup() (NFA, error) {
+func (p *Parser) parseCharClass() (NFA, error) {
 	if !strings.Contains(p.pattern[p.pos:], "]") {
 		return NFA{}, fmt.Errorf("missing ] for char group")
 	}
