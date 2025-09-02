@@ -1,8 +1,10 @@
 package main
 
 import (
+	"bufio"
 	"fmt"
 	"io"
+	"log"
 	"os"
 	"slices"
 	"strconv"
@@ -30,46 +32,124 @@ func main() {
 	}
 }
 
+func readFile(filename string) ([][]byte, error) {
+	file, err := os.Open(filename)
+	if err != nil {
+		return nil, fmt.Errorf("problem opening file %v, err:%v", filename, err)
+	}
+	sc := bufio.NewScanner(file)
+
+	lines := [][]byte{}
+
+	for sc.Scan() {
+		lines = append(lines, sc.Bytes())
+	}
+
+	if err := sc.Err(); err != nil {
+		log.Fatal(err)
+	}
+
+	return lines, nil
+}
+
 func cli() {
-	if len(os.Args) < 3 || os.Args[1] != "-E" {
+	if os.Args[1] != "-E" {
 		fmt.Fprintf(os.Stderr, "usage: mygrep -E <pattern>\n")
 		os.Exit(2)
 	}
 
+	lines := [][]byte{}
+	var err error
+
+	if len(os.Args) >= 4 {
+		lines, err = readFile(os.Args[3])
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "error: read input file: %v\n", err)
+			os.Exit(2)
+		}
+	} else {
+		line, err := io.ReadAll(os.Stdin)
+		lines = [][]byte{line}
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "error: read input text: %v\n", err)
+			os.Exit(2)
+		}
+
+	}
+
 	pattern := os.Args[2]
 
-	line, err := io.ReadAll(os.Stdin)
+	regexEngine, err := NewRegexEngine(pattern)
+
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "error: read input text: %v\n", err)
-		os.Exit(2)
+		log.Fatal("error parsing regex")
 	}
 
-	matches, _, err := matchLine(line, pattern)
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "error: %v\n", err)
-		os.Exit(2)
-	}
+	_, match := regexEngine.matchMultiLine(lines)
 
-	if len(matches) == 0 {
+	if !match {
 		os.Exit(1)
 	}
 
 }
 
-func matchLine(line []byte, pattern string) ([][]byte, NFA, error) {
-	parser := Parser{conversion: Conversion{}, pattern: pattern, pos: 0}
+type RegexEngine struct {
+	pattern string
+	nfa     NFA
+}
+
+func NewRegexEngine(pattern string) (RegexEngine, error) {
+	rg := RegexEngine{
+		pattern: pattern,
+	}
+
+	err := rg.parsePattern()
+
+	if err != nil {
+		return RegexEngine{}, err
+	}
+
+	return rg, nil
+}
+
+func (rg *RegexEngine) parsePattern() error {
+
+	parser := Parser{conversion: Conversion{}, pattern: rg.pattern, pos: 0}
 	nfa, err := parser.parse()
 
-	fmt.Fprintln(os.Stderr, "Logs from your program will appear here!")
+	if err != nil {
+		return err
+	}
+	rg.nfa = nfa
 
+	return nil
+}
+
+func (rg RegexEngine) matchMultiLine(lines [][]byte) ([][][]byte, bool) {
+	match := false
+	multiLineMatches := [][][]byte{}
+	for _, line := range lines {
+		matches := rg.matchLine(line)
+
+		if len(matches) > 0 {
+			match = true
+			fmt.Printf("%s", line)
+		}
+		multiLineMatches = append(multiLineMatches, matches)
+	}
+
+	return multiLineMatches, match
+}
+
+func (rg RegexEngine) matchLine(line []byte) [][]byte {
 	isStartAnchor := false
-	if len(pattern) > 0 && pattern[0] == '^' {
+	if len(rg.pattern) > 0 && rg.pattern[0] == '^' {
 		isStartAnchor = true
 	}
 
-	matches := nfa.findAllMatches(line, isStartAnchor)
+	matches := rg.nfa.findAllMatches(line, isStartAnchor)
 
-	return matches, nfa, err
+	return matches
 }
 
 type NFATransition struct {
@@ -92,7 +172,7 @@ type State struct {
 }
 
 var stateCounter int = 0
-var capturingGroupCounter int = 0
+var capturingGroupCounter int = 1
 
 func NewState() State {
 	stateCounter++
@@ -152,11 +232,11 @@ type StackData struct {
 type MemoryGroup struct {
 	start int
 	end   int
-	input string
 }
 
 type Memory struct {
-	groups map[string]MemoryGroup
+	activeGroup map[string]MemoryGroup
+	groupMatch  map[string]MemoryGroup
 }
 
 type Stack struct {
@@ -165,39 +245,28 @@ type Stack struct {
 }
 
 func (n *NFA) run(line []byte, index int) (bool, []byte, int) {
-	stack := Stack{memory: Memory{groups: make(map[string]MemoryGroup)}}
+	stack := Stack{memory: Memory{activeGroup: make(map[string]MemoryGroup), groupMatch: make(map[string]MemoryGroup)}}
 	stack.push(n.states[n.initState], 0)
 	line = line[index:]
 	for stack.length() > 0 {
 		item := stack.pop()
+		n.compueGroup(item, &stack, line)
 		if item.currentState.isFinal {
 			return true, line[:item.i], index + item.i
 		}
 
-		n.compueGroup(item, stack, line)
-
-		// for i := len(item.currentState.transitions) - 1; i >= 0; i-- {
-		// 	transition := item.currentState.transitions[i]
-		// 	if !(item.i < len(line) || transition.matcher.isEpsilon()) {
-		// 		continue
-		// 	}
-		// 	if transition.matcher.match(line, item.i).match {
-		// 		newIndex := item.i
-		// 		if !transition.matcher.isEpsilon() {
-		// 			newIndex += 1
-		// 		}
-		// 		toState := n.states[transition.to]
-		// 		stack.push(toState, newIndex)
-		// 	}
-		// }
-
 		for i := len(item.currentState.transitions) - 1; i >= 0; i-- {
 			transition := item.currentState.transitions[i]
 
-			if (item.i < len(line) || transition.matcher.isEpsilon()) && transition.matcher.match(line, item.i).match {
+			if !(item.i < len(line) || transition.matcher.isEpsilon()) {
+				continue
+			}
+			match := transition.matcher.match(line, item.i, stack.memory)
+
+			if match.match {
 				newIndex := item.i
 				if !transition.matcher.isEpsilon() {
-					newIndex += 1
+					newIndex += match.consume
 				}
 				toState := n.states[transition.to]
 				stack.push(toState, newIndex)
@@ -207,18 +276,17 @@ func (n *NFA) run(line []byte, index int) (bool, []byte, int) {
 	return false, nil, 0
 }
 
-func (n *NFA) compueGroup(stackdAta StackData, stack Stack, line []byte) {
+func (n *NFA) compueGroup(stackdAta StackData, stack *Stack, line []byte) {
 	for _, item := range stackdAta.currentState.startGroup {
-		stack.memory.groups[item] = MemoryGroup{
+		stack.memory.activeGroup[item] = MemoryGroup{
 			start: stackdAta.i,
 		}
 	}
 
 	for _, item := range stackdAta.currentState.endGroup {
-		stack.memory.groups[item] = MemoryGroup{
+		stack.memory.groupMatch[item] = MemoryGroup{
 			end:   stackdAta.i,
-			start: stack.memory.groups[item].start,
-			input: string(line[stack.memory.groups[item].start:stackdAta.i]),
+			start: stack.memory.activeGroup[item].start,
 		}
 	}
 }
@@ -248,15 +316,6 @@ func (n *NFA) findAllMatches(input []byte, isStartAnchor bool) [][]byte {
 
 	return matches
 }
-
-// Capturing groups???
-// what do we need to have??
-// 1. we need to know when capturing group start
-// 2. we need to know when capturing group end in nfa
-// 3. thne we need to save content that was captured
-// So basically we add start capturing group with special group name in nfa parsing adding it to state, same end of capturing group
-// then while exceuting check if state has start of capturing group and save entry point, if end save what string was captured
-// no to matcher we pass string, index and memory, memory has all captured group, so in case of referenc, we read string from memory add check if next bytes are fit or not.
 
 func (n *NFA) appendNfa(nfa NFA, unionStateName string) {
 	for _, item := range nfa.states {
@@ -384,6 +443,7 @@ func (p Parser) isNextEnd() bool {
 
 func (p *Parser) parse() (NFA, error) {
 	stateCounter = 0
+	capturingGroupCounter = 1
 	return p.parseAlternation()
 }
 
@@ -632,8 +692,8 @@ func (p *Parser) parseEscape() (NFA, error) {
 		return p.conversion.oneStepNFA(NewWordMatcher())
 	}
 
-	if p.pattern[p.pos] >= '0' && p.pattern[p.pos] <= '9' {
-
+	if esc >= '1' && esc <= '9' {
+		return p.conversion.oneStepNFA(BackreferenceMatcher{groupId: string(esc)})
 	}
 
 	return p.parseLiteral()
@@ -732,7 +792,7 @@ type MatchResult struct {
 	consume int
 }
 type Matcher interface {
-	match(b []byte, index int) MatchResult
+	match(b []byte, index int, memory Memory) MatchResult
 	isEpsilon() bool
 }
 
@@ -740,7 +800,7 @@ type EpsilonMatcher struct {
 	char byte
 }
 
-func (lm EpsilonMatcher) match(b []byte, index int) MatchResult {
+func (lm EpsilonMatcher) match(b []byte, index int, memory Memory) MatchResult {
 	return MatchResult{match: true, consume: 0}
 }
 
@@ -752,7 +812,7 @@ type LiteralMatcher struct {
 	char byte
 }
 
-func (lm LiteralMatcher) match(b []byte, index int) MatchResult {
+func (lm LiteralMatcher) match(b []byte, index int, memory Memory) MatchResult {
 	return MatchResult{match: lm.char == b[index], consume: 1}
 }
 
@@ -764,7 +824,7 @@ type DigitMatcher struct {
 	ranges []CharRange
 }
 
-func (dm DigitMatcher) match(b []byte, index int) MatchResult {
+func (dm DigitMatcher) match(b []byte, index int, memory Memory) MatchResult {
 
 	return MatchResult{match: matchRanges(dm.ranges, b[index]), consume: 1}
 }
@@ -784,7 +844,7 @@ type WordMatcher struct {
 	chars  []byte
 }
 
-func (wm WordMatcher) match(b []byte, index int) MatchResult {
+func (wm WordMatcher) match(b []byte, index int, memory Memory) MatchResult {
 	return MatchResult{match: matchRanges(wm.ranges, b[index]) || matchChars(wm.chars, b[index]), consume: 1}
 }
 
@@ -824,7 +884,7 @@ type CharacterGroupMatcher struct {
 	label      string
 }
 
-func (cgm CharacterGroupMatcher) match(b []byte, index int) MatchResult {
+func (cgm CharacterGroupMatcher) match(b []byte, index int, memory Memory) MatchResult {
 	base := matchChars(cgm.chars, b[index]) || matchRanges(cgm.ranges, b[index])
 
 	if cgm.isNegative {
@@ -862,7 +922,7 @@ func matchChars(chars []byte, b byte) bool {
 
 type StartOfStringMatcher struct{}
 
-func (startOfStringMatcher StartOfStringMatcher) match(b []byte, index int) MatchResult {
+func (startOfStringMatcher StartOfStringMatcher) match(b []byte, index int, memory Memory) MatchResult {
 	return MatchResult{match: index == 0, consume: 0}
 }
 
@@ -872,7 +932,7 @@ func (lm StartOfStringMatcher) isEpsilon() bool {
 
 type EndOfStringMatcher struct{}
 
-func (endOfStringMatcher EndOfStringMatcher) match(b []byte, index int) MatchResult {
+func (endOfStringMatcher EndOfStringMatcher) match(b []byte, index int, memory Memory) MatchResult {
 	return MatchResult{match: len(b) == index, consume: 0}
 }
 
@@ -882,7 +942,7 @@ func (lm EndOfStringMatcher) isEpsilon() bool {
 
 type AnyCharMatcher struct{}
 
-func (anyCharMatcher AnyCharMatcher) match(b []byte, index int) MatchResult {
+func (anyCharMatcher AnyCharMatcher) match(b []byte, index int, memory Memory) MatchResult {
 	return MatchResult{match: true, consume: 1}
 }
 
@@ -895,14 +955,14 @@ type BackreferenceMatcher struct {
 }
 
 func (backreferenceMatcher BackreferenceMatcher) match(line []byte, index int, memory Memory) MatchResult {
-	memGroup, ok := memory.groups[backreferenceMatcher.groupId]
+	memGroup, ok := memory.groupMatch[backreferenceMatcher.groupId]
 
 	if !ok {
-		panic("memory doesnt hae group" + backreferenceMatcher.groupId)
+		panic("memory doesnt have group" + backreferenceMatcher.groupId)
 	}
 	i := index
 
-	for _, b := range memGroup.input {
+	for _, b := range line[memGroup.start:memGroup.end] {
 		if byte(b) != line[i] {
 			return MatchResult{match: false, consume: i - index}
 		}

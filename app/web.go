@@ -38,12 +38,13 @@ func webServer() {
 		if r.Method == "POST" {
 			regex := r.FormValue("regex")
 			text := r.FormValue("text")
-			matches, nfa, err := matchLine([]byte(text), regex)
+			regexEngine, err := NewRegexEngine(regex)
+			matches := regexEngine.matchLine([]byte(text))
 			if err != nil {
 				log.Fatal(err)
 			}
 
-			nfaData := convertNFAToData(nfa)
+			nfaData := convertNFAToData(regexEngine.nfa)
 
 			// Debug: Print NFA structure to terminal
 			fmt.Printf("=== NFA DEBUG (regex: %s) ===\n", regex)
