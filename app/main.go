@@ -6,6 +6,7 @@ import (
 	"io"
 	"log"
 	"os"
+	"path/filepath"
 	"slices"
 	"strconv"
 	"strings"
@@ -32,6 +33,25 @@ func main() {
 	}
 }
 
+type File struct {
+	name string
+	data [][]byte
+}
+
+func readFiles(filenames []string) ([]File, error) {
+	files := []File{}
+	for _, filename := range filenames {
+		data, err := readFile(filename)
+
+		if err != nil {
+			return nil, err
+		}
+		files = append(files, File{name: filename, data: data})
+	}
+
+	return files, nil
+}
+
 func readFile(filename string) ([][]byte, error) {
 	file, err := os.Open(filename)
 	if err != nil {
@@ -52,43 +72,129 @@ func readFile(filename string) ([][]byte, error) {
 	return lines, nil
 }
 
+func listfilePath(folder string) ([]string, error) {
+	filePath := []string{}
+	err := filepath.WalkDir(folder, func(path string, d os.DirEntry, err error) error {
+		if err != nil {
+			return err
+		}
+
+		if !d.IsDir() {
+			filePath = append(filePath, path)
+		}
+
+		return nil
+	})
+
+	if err != nil {
+		return nil, err
+	}
+
+	return filePath, nil
+}
+
+type Args struct {
+	pattern     string
+	isRecusrive bool
+	directory   string
+	filePathes  []string
+}
+
+func parseArgs() (Args, error) {
+	args := Args{}
+	argsCopy := os.Args[1:]
+
+	if argsCopy[0] == "-r" {
+		args.isRecusrive = true
+		argsCopy = argsCopy[1:]
+	}
+
+	if argsCopy[0] != "-E" {
+		return Args{}, fmt.Errorf("usage: mygrep -E <pattern>")
+	}
+	argsCopy = argsCopy[1:]
+
+	args.pattern = argsCopy[0]
+	argsCopy = argsCopy[1:]
+
+	if args.isRecusrive {
+		args.directory = argsCopy[0]
+		return args, nil
+	}
+
+	for i := 0; i < len(argsCopy); i++ {
+		args.filePathes = append(args.filePathes, argsCopy[i])
+	}
+
+	return args, nil
+}
+
 func cli() {
-	if os.Args[1] != "-E" {
-		fmt.Fprintf(os.Stderr, "usage: mygrep -E <pattern>\n")
+	args, err := parseArgs()
+	if err != nil {
+		fmt.Println(err)
 		os.Exit(2)
 	}
-
-	lines := [][]byte{}
-	var err error
-
-	if len(os.Args) >= 4 {
-		lines, err = readFile(os.Args[3])
+	if args.isRecusrive {
+		filepath, err := listfilePath(args.directory)
 		if err != nil {
-			fmt.Fprintf(os.Stderr, "error: read input file: %v\n", err)
+			fmt.Println(err)
 			os.Exit(2)
 		}
-	} else {
-		line, err := io.ReadAll(os.Stdin)
-		lines = [][]byte{line}
-		if err != nil {
-			fmt.Fprintf(os.Stderr, "error: read input text: %v\n", err)
-			os.Exit(2)
-		}
+		args.filePathes = filepath
 
 	}
 
-	pattern := os.Args[2]
-
-	regexEngine, err := NewRegexEngine(pattern)
+	regexEngine, err := NewRegexEngine(args.pattern)
 
 	if err != nil {
 		log.Fatal("error parsing regex")
 	}
 
-	_, match := regexEngine.matchMultiLine(lines)
+	if len(args.filePathes) > 0 {
+		files, err := readFiles(args.filePathes)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "error: read input file: %v\n", err)
+			os.Exit(2)
+		}
 
-	if !match {
-		os.Exit(1)
+		isAnyMatch := false
+		isPrefix := len(args.filePathes) > 1
+		for _, file := range files {
+			matches, isMatch := regexEngine.matchMultiLine(file.data)
+			if isMatch {
+				isAnyMatch = true
+			}
+
+			for _, match := range matches {
+				if isPrefix {
+					fmt.Println(file.name + ":" + string(match.line))
+
+				} else {
+					fmt.Println(string(match.line))
+				}
+			}
+		}
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "error: read input file: %v\n", err)
+			os.Exit(2)
+		}
+		if !isAnyMatch {
+			os.Exit(1)
+		}
+	} else {
+		line, err := io.ReadAll(os.Stdin)
+		lines := [][]byte{line}
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "error: read input text: %v\n", err)
+			os.Exit(2)
+		}
+		_, isMatch := regexEngine.matchMultiLine(lines)
+
+		if !isMatch {
+			os.Exit(1)
+		}
+
 	}
 
 }
@@ -125,17 +231,26 @@ func (rg *RegexEngine) parsePattern() error {
 	return nil
 }
 
-func (rg RegexEngine) matchMultiLine(lines [][]byte) ([][][]byte, bool) {
+// func (rg RegexEngine) matchFilesMultiline(files []File) ([][][]byte, bool) {
+
+// }
+
+type RegexOutput struct {
+	line        []byte
+	matchPhrase [][]byte
+}
+
+func (rg RegexEngine) matchMultiLine(lines [][]byte) ([]RegexOutput, bool) {
 	match := false
-	multiLineMatches := [][][]byte{}
+	multiLineMatches := []RegexOutput{}
 	for _, line := range lines {
 		matches := rg.matchLine(line)
 
 		if len(matches) > 0 {
 			match = true
-			fmt.Printf("%s", line)
+			multiLineMatches = append(multiLineMatches, RegexOutput{line: line, matchPhrase: matches})
 		}
-		multiLineMatches = append(multiLineMatches, matches)
+
 	}
 
 	return multiLineMatches, match
