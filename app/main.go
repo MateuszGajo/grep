@@ -722,6 +722,39 @@ func (p *Parser) parseRepeat() (NFA, error) {
 
 		leftAtom.setFinalStates([]State{q4})
 		p.pos++
+	case '*':
+		/*
+					  ┌────────ε────────┐
+					  ▼          	    │
+			(q1) -ε> (q2) -condition-> (q3) -ε> ((q4))
+			  │                    			       ▲
+			  └────────────────ε───────────────────┘
+
+			1. Create start state q1
+			2. Create end state q4
+			3. Add epislon transition from q1 to q4
+			4. Add epsilon transition from q1 to q2
+			5. Add epsilon transition from q3 to q2 (loop repetition), by default it's greedy so prioritize it rather than exit the loop
+			6. Add epsilon transition from q3 to q4
+		*/
+		q1 := NewState()
+		q4 := NewState()
+		q4.isFinal = true
+
+		leftAtom.addStates([]State{q1, q4})
+		currentInitState := leftAtom.initState
+		leftAtom.setInitState(q1)
+		leftAtom.addTransition(q1, leftAtom.states[currentInitState], EpsilonMatcher{})
+		leftAtom.addTransition(q1, q4, EpsilonMatcher{})
+		leftAtom.addTransition(leftAtom.states[leftAtom.endStates[0]], leftAtom.states[currentInitState], EpsilonMatcher{})
+		leftAtom.addTransition(leftAtom.states[leftAtom.endStates[0]], q4, EpsilonMatcher{})
+
+		last := leftAtom.states[leftAtom.endStates[0]]
+		last.isFinal = false
+		leftAtom.states[leftAtom.endStates[0]] = last
+
+		leftAtom.setFinalStates([]State{q4})
+		p.pos++
 	}
 
 	return leftAtom, err

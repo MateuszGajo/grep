@@ -334,6 +334,71 @@ func TestQuestionmark(t *testing.T) {
 	}
 }
 
+func TestAsterik(t *testing.T) {
+	data := []Data{
+		{
+			pattern: "ca*t",
+			input:   "ct",
+			matches: []string{"ct"},
+		},
+		{
+			pattern: "ca*t",
+			input:   "caaat",
+			matches: []string{"caaat"},
+		},
+		{
+			pattern: "ca*t",
+			input:   "dog",
+			matches: []string{},
+		},
+		{
+			pattern: "k\\d*t",
+			input:   "kt",
+			matches: []string{"kt"},
+		},
+		{
+			pattern: "k\\d*t",
+			input:   "k1t",
+			matches: []string{"k1t"},
+		},
+		{
+			pattern: "k[abc]*t",
+			input:   "kt",
+			matches: []string{"kt"},
+		},
+		{
+			pattern: "k[abc]*t",
+			input:   "kat",
+			matches: []string{"kat"},
+		},
+		{
+			pattern: "k[abc]*t",
+			input:   "kabct",
+			matches: []string{"kabct"},
+		},
+		{
+			pattern: "k[abc]*t",
+			input:   "kxt",
+			matches: []string{},
+		},
+	}
+
+	for _, item := range data {
+		t.Run(fmt.Sprintf("Checking input %v, for pattern %v", item.input, item.pattern), func(t *testing.T) {
+			regexEngine, _ := NewRegexEngine(item.pattern)
+			matches := regexEngine.matchLine([]byte(item.input))
+			matchesString := []string{}
+			for _, item := range matches {
+				matchesString = append(matchesString, string(item))
+			}
+
+			if !stringSliceEqual(matchesString, item.matches) {
+				t.Errorf("Expected to find these matches: %v, got: %v", item.matches, matchesString)
+			}
+		})
+	}
+}
+
 func TestDot(t *testing.T) {
 	data := []Data{
 		{
