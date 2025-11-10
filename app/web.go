@@ -6,6 +6,7 @@ import (
 	"html/template"
 	"log"
 	"net/http"
+	"strconv"
 )
 
 type WebData struct {
@@ -89,13 +90,13 @@ func convertNFAToData(nfa NFA) NFAData {
 		for i, trans := range state.transitions {
 			label := getMatcherLabel(trans.matcher)
 			transitions[i] = TransitionData{
-				To:        trans.to,
+				To:        trans.to.name,
 				Label:     label,
 				IsEpsilon: trans.matcher.isEpsilon(),
 			}
 		}
 
-		statesData[name] = StateData{
+		statesData[strconv.Itoa(name)] = StateData{
 			Name:        state.name,
 			Transitions: transitions,
 			IsFinal:     state.isFinal,
@@ -103,7 +104,7 @@ func convertNFAToData(nfa NFA) NFAData {
 	}
 
 	return NFAData{
-		InitState: nfa.initState,
+		InitState: nfa.initState.name,
 		States:    statesData,
 	}
 }
