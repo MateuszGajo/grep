@@ -268,20 +268,19 @@ func (rg RegexEngine) matchLine(line []byte) [][]byte {
 }
 
 type NFATransition struct {
-	to      State
+	to      string
 	matcher Matcher
 }
 
 type NFA struct {
-	initState State
-	endStates []*State
-	states    []State
+	States []State
 }
 
 type State struct {
 	name        string
 	transitions []NFATransition
 	isFinal     bool
+	isInitial   bool
 	startGroup  []string
 	endGroup    []string
 }
@@ -297,40 +296,74 @@ func NewState() State {
 	}
 }
 
+func (nfa *NFA) getFinalStates() []State {
+	endStates := []State{}
+	for i := 0; i < len(nfa.States); i++ {
+		if nfa.States[i].isFinal {
+			endStates = append(endStates, nfa.States[i])
+		}
+	}
+
+	return endStates
+}
+
+func (nfa *NFA) getInitialState() *State {
+	for i := 0; i < len(nfa.States); i++ {
+		if nfa.States[i].isInitial {
+			return &nfa.States[i]
+		}
+	}
+
+	return nil
+}
+
 func (n *NFA) addStates(states []State) {
-	n.states = append(n.states, states...)
+	n.States = append(n.States, states...)
 }
 
 func (n *NFA) findState(name string) *State {
-	for i, _ := range n.states {
-		if n.states[i].name == name {
-			return &n.states[i]
+	for i, _ := range n.States {
+		if n.States[i].name == name {
+			return &n.States[i]
 		}
 	}
 	return nil
 }
 
-func (n *NFA) addTransition(from State, to *State, matcher Matcher) error {
+func (n *NFA) findStateIndex(name string) int {
+	for i, _ := range n.States {
+		if n.States[i].name == name {
+			return i
+		}
+	}
+	panic("Fsd")
+}
 
-	fromState := n.findState(from.name)
+func (n *NFA) addTransition(from string, to string, matcher Matcher) error {
 
-	fromState.transitions = append(fromState.transitions, NFATransition{to: *to, matcher: matcher})
+	fromState := n.findState(from)
+
+	fromState.transitions = append(fromState.transitions, NFATransition{to: to, matcher: matcher})
 
 	return nil
 }
 
-func (n *NFA) setInitState(state *State) {
-	n.initState = *state
+func (n *NFA) setInitState(name string) {
+	for i := 0; i < len(n.States); i++ {
+		n.States[i].isInitial = false
+	}
+	n.findState(name).isInitial = true
 }
 
-func (n *NFA) setFinalStates(states []*State) error {
-	n.endStates = []*State{}
+func (n *NFA) setFinalStates(states []State) error {
+	for index, _ := range n.States {
+		n.States[index].isFinal = false
+	}
+
 	for _, state := range states {
 		state := n.findState(state.name)
 
 		state.isFinal = true
-
-		n.endStates = append(n.endStates, state)
 	}
 
 	return nil
@@ -358,7 +391,7 @@ type Stack struct {
 
 func (n *NFA) run(line []byte, index int) (bool, []byte, int) {
 	stack := Stack{memory: Memory{activeGroup: make(map[string]MemoryGroup), groupMatch: make(map[string]MemoryGroup)}}
-	stack.push(*n.findState(n.initState.name), 0)
+	stack.push(*n.getInitialState(), 0)
 	line = line[index:]
 	for stack.length() > 0 {
 		item := stack.pop()
@@ -380,7 +413,7 @@ func (n *NFA) run(line []byte, index int) (bool, []byte, int) {
 				if !transition.matcher.isEpsilon() {
 					newIndex += match.consume
 				}
-				toState := n.findState(transition.to.name)
+				toState := n.findState(transition.to)
 				stack.push(*toState, newIndex)
 			}
 		}
@@ -430,35 +463,46 @@ func (n *NFA) findAllMatches(input []byte, isStartAnchor bool) [][]byte {
 }
 
 func (n *NFA) appendNfa(nfa NFA, unionStateName string) {
-	for _, item := range nfa.states {
-		if item.name == nfa.initState.name {
+	for _, item := range nfa.States {
+		if item.name == nfa.getInitialState().name {
 			continue
 		}
-		n.states = append(n.states, item)
+		n.States = append(n.States, item)
 	}
 
-	for _, transition := range nfa.findState(nfa.initState.name).transitions {
-		n.addTransition(*n.findState(unionStateName), n.findState(transition.to.name), transition.matcher)
+	for _, transition := range nfa.getInitialState().transitions {
+		n.addTransition(n.findState(unionStateName).name, n.findState(transition.to).name, transition.matcher)
 	}
 	union := n.findState(unionStateName)
-	union.startGroup = append(union.startGroup, nfa.findState(nfa.initState.name).startGroup...)
-	union.endGroup = append(union.endGroup, nfa.findState(nfa.initState.name).endGroup...)
+	union.startGroup = append(union.startGroup, nfa.getInitialState().startGroup...)
+	union.endGroup = append(union.endGroup, nfa.getInitialState().endGroup...)
 
-	newEndStates := []*State{}
+	newEndStates := []State{}
 
-	for _, item := range n.endStates {
-
+	for _, item := range n.getFinalStates() {
 		if item.name == unionStateName {
-			newEndStates = append(newEndStates, nfa.endStates...)
-			unionState := n.findState(unionStateName)
-			unionState.isFinal = false
+			newEndStates = append(newEndStates, nfa.getFinalStates()...)
 		} else {
 			newEndStates = append(newEndStates, item)
 		}
 	}
-	n.endStates = newEndStates
+	n.setFinalStates(newEndStates)
 
 }
+
+func copyNfa(nfa NFA) *NFA {
+	// newNfa, err := cloneMyStruct(nfa)
+	newNfa := NFA{}
+
+	for i := 0; i < len(newNfa.States); i++ {
+		state := NewState()
+		newNfa.States[i].name = state.name
+	}
+
+	return &newNfa
+}
+
+// Json copy its no the fastest but lets stick with it for now
 
 // ------------------ Parser ------------------
 // Builds an AST based on the following regex grammar:
@@ -514,16 +558,16 @@ type Conversion struct {
 }
 
 func (c Conversion) oneStepNFA(matcher Matcher) (NFA, error) {
-	nfa := NFA{states: []State{}}
-	a := NewState()
-	b := NewState()
-	nfa.addStates([]State{a, b})
-	nfa.setInitState(&a)
-	err := nfa.setFinalStates([]*State{&b})
+	nfa := NFA{States: []State{}}
+	q1 := NewState()
+	q2 := NewState()
+	nfa.addStates([]State{q1, q2})
+	nfa.setInitState(q1.name)
+	err := nfa.setFinalStates([]State{q2})
 	if err != nil {
 		return nfa, err
 	}
-	err = nfa.addTransition(a, &b, matcher)
+	err = nfa.addTransition(q1.name, q2.name, matcher)
 
 	return nfa, err
 }
@@ -581,20 +625,19 @@ func (p *Parser) parseAlternation() (NFA, error) {
 	if !p.isEnd() && p.pattern[p.pos] == '|' {
 		start := NewState()
 		end := NewState()
-		end.isFinal = true
-		nfa := NFA{states: []State{}}
+		nfa := NFA{States: []State{}}
 		nfa.addStates([]State{start, end})
-		nfa.setInitState(&start)
-		nfa.setFinalStates([]*State{&end})
-		for _, state := range left.states {
+		nfa.setInitState(start.name)
+		nfa.setFinalStates([]State{end})
+		for _, state := range left.States {
 			if state.isFinal {
 				state.isFinal = false
 			}
 			nfa.addStates([]State{state})
 		}
-		nfa.addTransition(start, nfa.findState(left.initState.name), EpsilonMatcher{})
-		for _, state := range left.endStates {
-			nfa.addTransition(*nfa.findState(state.name), &end, EpsilonMatcher{})
+		nfa.addTransition(start.name, left.getInitialState().name, EpsilonMatcher{})
+		for _, state := range left.getFinalStates() {
+			nfa.addTransition(nfa.findState(state.name).name, end.name, EpsilonMatcher{})
 		}
 
 		p.pos++
@@ -605,16 +648,16 @@ func (p *Parser) parseAlternation() (NFA, error) {
 			return NFA{}, err
 		}
 
-		for _, state := range right.states {
+		for _, state := range right.States {
 			if state.isFinal {
 				state.isFinal = false
 			}
 			nfa.addStates([]State{state})
 		}
-		nfa.addTransition(start, nfa.findState(right.initState.name), EpsilonMatcher{})
+		nfa.addTransition(start.name, right.getInitialState().name, EpsilonMatcher{})
 
-		for _, state := range right.endStates {
-			nfa.addTransition(*nfa.findState(state.name), &end, EpsilonMatcher{})
+		for _, state := range right.getFinalStates() {
+			nfa.addTransition(nfa.findState(state.name).name, end.name, EpsilonMatcher{})
 		}
 
 		return nfa, nil
@@ -634,7 +677,7 @@ func (p *Parser) parseConcatenation() (NFA, error) {
 		if err != nil {
 			return NFA{}, err
 		}
-		left.appendNfa(right, left.endStates[0].name)
+		left.appendNfa(right, left.getFinalStates()[0].name)
 
 	}
 
@@ -667,20 +710,15 @@ func (p *Parser) parseRepeat() (NFA, error) {
 
 		q1 := NewState()
 		q4 := NewState()
-		q4.isFinal = true
 
 		leftAtom.addStates([]State{q1, q4})
-		currentInitState := leftAtom.initState
-		leftAtom.setInitState(&q1)
-		leftAtom.addTransition(q1, leftAtom.findState(currentInitState.name), EpsilonMatcher{})
+		leftAtom.addTransition(q1.name, leftAtom.getInitialState().name, EpsilonMatcher{})
 		// Greedy matcher, need to be added first
-		leftAtom.addTransition(*leftAtom.findState(leftAtom.endStates[0].name), leftAtom.findState(currentInitState.name), EpsilonMatcher{})
-		leftAtom.addTransition(*leftAtom.findState(leftAtom.endStates[0].name), &q4, EpsilonMatcher{})
+		leftAtom.addTransition(leftAtom.getFinalStates()[0].name, leftAtom.getInitialState().name, EpsilonMatcher{})
+		leftAtom.addTransition(leftAtom.getFinalStates()[0].name, q4.name, EpsilonMatcher{})
 
-		last := leftAtom.findState(leftAtom.endStates[0].name)
-		last.isFinal = false
-
-		leftAtom.setFinalStates([]*State{&q4})
+		leftAtom.setInitState(q1.name)
+		leftAtom.setFinalStates([]State{q4})
 		p.pos++
 	case '?':
 		/*
@@ -699,20 +737,15 @@ func (p *Parser) parseRepeat() (NFA, error) {
 
 		q1 := NewState()
 		q4 := NewState()
-		q4.isFinal = true
 
 		leftAtom.addStates([]State{q1, q4})
-		currentInitState := leftAtom.initState
-		leftAtom.setInitState(&q1)
-		leftAtom.addTransition(q1, leftAtom.findState(currentInitState.name), EpsilonMatcher{})
-		leftAtom.addTransition(q1, &q4, EpsilonMatcher{})
+		leftAtom.addTransition(q1.name, leftAtom.getInitialState().name, EpsilonMatcher{})
+		leftAtom.addTransition(q1.name, q4.name, EpsilonMatcher{})
 		// Greedy matcher, need to be added first
-		leftAtom.addTransition(*leftAtom.findState(leftAtom.endStates[0].name), &q4, EpsilonMatcher{})
+		leftAtom.addTransition(leftAtom.getFinalStates()[0].name, q4.name, EpsilonMatcher{})
 
-		last := leftAtom.findState(leftAtom.endStates[0].name)
-		last.isFinal = false
-
-		leftAtom.setFinalStates([]*State{&q4})
+		leftAtom.setInitState(q1.name)
+		leftAtom.setFinalStates([]State{q4})
 		p.pos++
 	case '*':
 		/*
@@ -731,54 +764,123 @@ func (p *Parser) parseRepeat() (NFA, error) {
 		*/
 		q1 := NewState()
 		q4 := NewState()
-		q4.isFinal = true
 
 		leftAtom.addStates([]State{q1, q4})
-		currentInitState := leftAtom.initState
-		leftAtom.setInitState(&q1)
-		leftAtom.addTransition(q1, leftAtom.findState(currentInitState.name), EpsilonMatcher{})
-		leftAtom.addTransition(q1, &q4, EpsilonMatcher{})
-		leftAtom.addTransition(*leftAtom.findState(leftAtom.endStates[0].name), leftAtom.findState(currentInitState.name), EpsilonMatcher{})
-		leftAtom.addTransition(*leftAtom.findState(leftAtom.endStates[0].name), &q4, EpsilonMatcher{})
+		leftAtom.addTransition(q1.name, leftAtom.getInitialState().name, EpsilonMatcher{})
+		leftAtom.addTransition(q1.name, q4.name, EpsilonMatcher{})
+		leftAtom.addTransition(leftAtom.getFinalStates()[0].name, leftAtom.getInitialState().name, EpsilonMatcher{})
+		leftAtom.addTransition(leftAtom.getFinalStates()[0].name, q4.name, EpsilonMatcher{})
 
-		last := leftAtom.findState(leftAtom.endStates[0].name)
-		last.isFinal = false
-
-		leftAtom.setFinalStates([]*State{&q4})
+		leftAtom.setInitState(q1.name)
+		leftAtom.setFinalStates([]State{q4})
 		p.pos++
-		// case '{':
-		// 	p.pos++
-		// 	currByte := p.pattern[p.pos]
-		// 	numberString := ""
-		// 	for currByte >= '0' && currByte <= '9' {
-		// 		numberString += string(currByte)
-		// 		p.pos++
-		// 	}
+	case '{':
+		p.pos++
+		currByte := p.pattern[p.pos]
+		numberString := ""
+		for currByte >= '0' && currByte <= '9' {
+			numberString += string(currByte)
+			p.pos++
+			currByte = p.pattern[p.pos]
+		}
 
-		// 	num, err := strconv.Atoi(numberString)
+		num, err := strconv.Atoi(numberString)
 
-		// 	if err != nil {
-		// 		panic("should never happend we read something wrong")
-		// 	}
+		if err != nil {
+			panic("should never happend we read something wrong")
+		}
 
-		// 	if currByte != '}' {
-		// 		panic("expected end of quantifier, currently support only for exact match e.g. {2}")
-		// 	}
-		// 	/*
-		// 		(q1) -condition-> (q2)
-		// 	*/
-		// 	// we need to repeat this multiple times
-		// 	// leftAtom.states[leftAtom.endStates[0]].transitions
+		if currByte != '}' {
+			panic("expected end of quantifier, currently support only for exact match e.g. {2}")
+		}
+		// exact quantifiers
+		/*
+			(q1) -condition X-> (q2) ──────ε─────▶ (q1->q3) -condition X-> (q2->q4)
+			│                      │ 				│                   		   │
+			└──────────────────────┘				└──────────────────────────────┘
+					 NFA 								NFA (clone) repeat X times
+		*/
+		// --- loop x times ----
+		// 1. Clone nfa
+		// 2. Add epsilon transition from q2 to q3 state
+		// 3. remove q2 as final state, q4 its new final
+		for i := 0; i < num; i++ {
 
-		// 	for i := 0; i < num; i++ {
+			nfaClone := copyNfa(leftAtom)
 
-		// 		// the simplest way possible is leftatom.end should have transition to leftatom.start n times
-		// 	}
+			// for _, state := range nfaClone.States {
+
+			// }
+
+			for j := 0; j < len(leftAtom.States); j++ {
+				leftAtom.States[j].isFinal = false
+			}
+			// leftAtom.addTransition(leftAtom.getFinalStates()[0].name, nfaClone.getInitialState().name, EpsilonMatcher{})
+			leftAtom.setFinalStates(nfaClone.getFinalStates())
+			leftAtom.setInitState(leftAtom.getInitialState().name)
+			// the simplest way possible is leftatom.end should have transition to leftatom.start n times
+		}
 
 	}
 
 	return leftAtom, err
 }
+
+// func cloneNFA(orig *NFA) (*NFA, error) {
+// 	// Step 1: create a new empty NFA
+// 	clone := &NFA{
+// 		States: make([]State, len(orig.States)),
+// 	}
+
+// 	// Step 2: copy all states' data except transitions (which contain pointers)
+// 	for i := range orig.States {
+// 		// Copy everything except transitions will be populated later
+// 		clone.States[i].name = orig.States[i].name
+// 		clone.States[i].isFinal = orig.States[i].isFinal
+// 		clone.States[i].isInitial = orig.States[i].isInitial
+// 		clone.States[i].startGroup = append([]string(nil), orig.States[i].startGroup...)
+// 		clone.States[i].endGroup = append([]string(nil), orig.States[i].endGroup...)
+// 	}
+
+// 	// Step 3: create a map for old state pointer to new state pointer
+// 	oldToNew := make(map[*State]*State)
+// 	for i := range orig.States {
+// 		oldToNew[&orig.States[i]] = &clone.States[i]
+// 	}
+
+// 	// Step 4: clone transitions fixing all 'to' pointers
+// 	for i := range orig.States {
+// 		clone.States[i].transitions = make([]NFATransition, len(orig.States[i].transitions))
+// 		for j, trans := range orig.States[i].transitions {
+// 			clone.States[i].transitions[j].matcher = trans.matcher
+// 			clone.States[i].transitions[j].to = oldToNew[trans.to]
+// 		}
+// 	}
+
+// 	return clone, nil
+// }
+
+// // Add cloned states safely to another NFA and fix all references inside the target NFA
+// func (n *NFA) addStates2(states []State) {
+// 	oldLen := len(n.States)
+// 	n.States = append(n.States, states...)
+
+// 	// Build map from the newly added states addresses to themselves
+// 	newStatesMap := make(map[string]*State)
+// 	for i := oldLen; i < len(n.States); i++ {
+// 		newStatesMap[n.States[i].name] = &n.States[i]
+// 	}
+
+// 	// Fix transitions inside all states in NFA (including new)
+// 	for i := range n.States {
+// 		for j := range n.States[i].transitions {
+// 			toName := n.States[i].transitions[j].to.name
+// 			if newState, ok := newStatesMap[toName]; ok {
+// 				n.States[i].transitions[j].to = newState
+// 			}
+// 		}
+// 	}
+// }
 
 func (p *Parser) parseAtom() (NFA, error) {
 	switch p.pattern[p.pos] {
@@ -821,21 +923,13 @@ func (p *Parser) parseGroup() (NFA, error) {
 	end := NewState()
 	end.endGroup = []string{capturingGroup}
 
-	end.isFinal = true
-
 	nfa.addStates([]State{start, end})
-
-	initState := nfa.initState
-	endStates := nfa.endStates
-	nfa.setInitState(&start)
-	nfa.setFinalStates([]*State{&end})
-	nfa.addTransition(start, nfa.findState(initState.name), EpsilonMatcher{})
-	for _, item := range endStates {
-		state := nfa.findState(item.name)
-		nfa.addTransition(*state, &end, EpsilonMatcher{})
-
-		state.isFinal = false
+	nfa.addTransition(start.name, nfa.getInitialState().name, EpsilonMatcher{})
+	for _, item := range nfa.getFinalStates() {
+		nfa.addTransition(item.name, end.name, EpsilonMatcher{})
 	}
+	nfa.setInitState(start.name)
+	nfa.setFinalStates([]State{end})
 
 	return nfa, err
 

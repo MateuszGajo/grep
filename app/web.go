@@ -85,12 +85,12 @@ func webServer() {
 func convertNFAToData(nfa NFA) NFAData {
 	statesData := make(map[string]StateData)
 
-	for name, state := range nfa.states {
+	for name, state := range nfa.States {
 		transitions := make([]TransitionData, len(state.transitions))
 		for i, trans := range state.transitions {
 			label := getMatcherLabel(trans.matcher)
 			transitions[i] = TransitionData{
-				To:        trans.to.name,
+				To:        trans.to,
 				Label:     label,
 				IsEpsilon: trans.matcher.isEpsilon(),
 			}
@@ -104,7 +104,7 @@ func convertNFAToData(nfa NFA) NFAData {
 	}
 
 	return NFAData{
-		InitState: nfa.initState.name,
+		InitState: nfa.getInitialState().name,
 		States:    statesData,
 	}
 }
