@@ -348,6 +348,14 @@ func (n *NFA) addTransition(from string, to string, matcher Matcher) error {
 	return nil
 }
 
+func (n *NFA) addPriorityTransition(from string, to string, matcher Matcher) {
+	fromState := n.findState(from)
+	fromState.transitions = append(
+		[]NFATransition{{to: to, matcher: matcher}},
+		fromState.transitions...,
+	)
+}
+
 func (n *NFA) setInitState(name string) {
 	for i := 0; i < len(n.States); i++ {
 		n.States[i].isInitial = false
@@ -491,12 +499,28 @@ func (n *NFA) appendNfa(nfa NFA, unionStateName string) {
 }
 
 func copyNfa(nfa NFA) *NFA {
-	// newNfa, err := cloneMyStruct(nfa)
 	newNfa := NFA{}
 
+	newStates := make([]State, len(nfa.States))
+	stateNameMapping := make(map[string]string)
+	for i := 0; i < len(nfa.States); i++ {
+		newStates[i] = NewState()
+		newStates[i].isFinal = nfa.States[i].isFinal
+		newStates[i].isInitial = nfa.States[i].isInitial
+		transitions := make([]NFATransition, len(nfa.States[i].transitions))
+		copy(transitions, nfa.States[i].transitions)
+		newStates[i].transitions = transitions
+		stateNameMapping[nfa.States[i].name] = newStates[i].name
+		// as far as i know coping (for quanitifer purposes) don't add new capturing groups so we skip that part
+	}
+
+	newNfa.States = newStates
+
 	for i := 0; i < len(newNfa.States); i++ {
-		state := NewState()
-		newNfa.States[i].name = state.name
+		for j := 0; j < len(newStates[i].transitions); j++ {
+			currName := newStates[i].transitions[j].to
+			newStates[i].transitions[j].to = stateNameMapping[currName]
+		}
 	}
 
 	return &newNfa
@@ -784,15 +808,43 @@ func (p *Parser) parseRepeat() (NFA, error) {
 			currByte = p.pattern[p.pos]
 		}
 
-		num, err := strconv.Atoi(numberString)
+		lowewrBound, err := strconv.Atoi(numberString)
 
 		if err != nil {
 			panic("should never happend we read something wrong")
 		}
 
+		isUpperBoundInfinity := false
+		upperBound := lowewrBound
+
+		if currByte == ',' {
+			numberString = ""
+			p.pos++
+			currByte = p.pattern[p.pos]
+			if currByte == '}' {
+				isUpperBoundInfinity = true
+			} else {
+				for currByte >= '0' && currByte <= '9' {
+					numberString += string(currByte)
+					p.pos++
+					currByte = p.pattern[p.pos]
+				}
+
+				num, err := strconv.Atoi(numberString)
+
+				if err != nil {
+					panic("should never happend we read something wrong")
+				}
+
+				upperBound = num
+			}
+
+		}
+
 		if currByte != '}' {
 			panic("expected end of quantifier, currently support only for exact match e.g. {2}")
 		}
+		p.pos++
 		// exact quantifiers
 		/*
 			(q1) -condition X-> (q2) ──────ε─────▶ (q1->q3) -condition X-> (q2->q4)
@@ -804,22 +856,84 @@ func (p *Parser) parseRepeat() (NFA, error) {
 		// 1. Clone nfa
 		// 2. Add epsilon transition from q2 to q3 state
 		// 3. remove q2 as final state, q4 its new final
-		for i := 0; i < num; i++ {
 
-			nfaClone := copyNfa(leftAtom)
+		// at least n times, with no upper limit
+		/*
 
-			// for _, state := range nfaClone.States {
+																										┌────────ε────────────┐
+																										▼          	    	  │
 
-			// }
+			(q1) -condition X-> (q2) ──────ε─────▶ (q1->q3) -condition X-> (q2->q4) ──────ε─────▶ (q1->q5) -condition X-> (q2->q6) ───────ε─────▶ q7 (end state)
+			│                      │ 				│                   		   │				│                   		   │
+			└──────────────────────┘				└──────────────────────────────┘				└──────────────────────────────┘
+					 NFA 							  NFA (clone) repeat n-1 times						NFA (clone) repeat n times
+		*/
 
-			for j := 0; j < len(leftAtom.States); j++ {
-				leftAtom.States[j].isFinal = false
+		// at least n times with no upper
+		// -- loop x times
+		// 1. Clone nfa
+		// 2. Add epsilon transition from q2 to q3 state
+		// 3. remove q2 as final state, set q4 as final state
+		// 4. add epsilion transition q6 to q5 (last copy of nfa)
+
+		// between n and m times
+		/*
+
+
+			(q1) -condition X-> (q2) ──────ε─────▶ (q1->q3) -condition X-> (q2->q4) ──────ε─────▶ (q1->q5) -condition X-> (q2->q6) ───────ε─────▶ q7 (end state)
+			│                      │ 				│                   		   │				│                   		   │
+			└──────────────────────┘				└──────────────────────────────┘				└──────────────────────────────┘
+					 NFA 							  NFA (clone) repeat n times						NFA (clone) repeat m-n times
+					 			  │
+			  											         			  																		     ▲
+								 												 												└──────────────ε─────────┘
+																																						 ▲
+								 												 └───────────────────────────────ε───────────────────────────────────────┘
+		*/
+		// at least n times with no upper
+		// first iteration
+		// 	1. Clone nfa
+		// 	2. Add epsilon priority transition from q2 to new q3 state
+		// 	3. remove q2 as final state, set q4 as final state
+		// 	4. add epsilion transition from n copy (end stsate) to n copy init state
+		// If repeats more than m-n times
+		// 	1. add epslion from end state q4 to q7
+
+		cloneBase := copyNfa(leftAtom)
+
+		q1 := NewState()
+		q2 := NewState()
+		endState := NewState()
+
+		newNfa := NFA{States: []State{q1, q2}}
+		newNfa.setInitState(q1.name)
+		newNfa.setFinalStates([]State{q2})
+		newNfa.addTransition(q1.name, q2.name, EpsilonMatcher{})
+		newNfa.addStates([]State{endState})
+
+		for i := 0; i < upperBound; i++ {
+
+			nfaClone := copyNfa(*cloneBase)
+			newNfa.addStates(nfaClone.States)
+
+			newNfa.addPriorityTransition(newNfa.getFinalStates()[0].name, nfaClone.getInitialState().name, EpsilonMatcher{})
+			newNfa.setInitState(newNfa.getInitialState().name)
+			newNfa.setFinalStates([]State{*nfaClone.findState(nfaClone.getFinalStates()[0].name)})
+
+			if i >= lowewrBound-1 {
+				if isUpperBoundInfinity {
+					newNfa.addTransition(nfaClone.getFinalStates()[0].name, nfaClone.getInitialState().name, EpsilonMatcher{})
+					newNfa.addTransition(nfaClone.getFinalStates()[0].name, endState.name, EpsilonMatcher{})
+				} else {
+					newNfa.addTransition(newNfa.getFinalStates()[0].name, endState.name, EpsilonMatcher{})
+				}
 			}
-			// leftAtom.addTransition(leftAtom.getFinalStates()[0].name, nfaClone.getInitialState().name, EpsilonMatcher{})
-			leftAtom.setFinalStates(nfaClone.getFinalStates())
-			leftAtom.setInitState(leftAtom.getInitialState().name)
-			// the simplest way possible is leftatom.end should have transition to leftatom.start n times
+
 		}
+		newNfa.addTransition(newNfa.getFinalStates()[0].name, endState.name, EpsilonMatcher{})
+		newNfa.setFinalStates([]State{endState})
+
+		leftAtom = newNfa
 
 	}
 

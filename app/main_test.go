@@ -1,596 +1,717 @@
 package main
 
-// import (
-// 	"fmt"
-// 	"testing"
-// )
+import (
+	"fmt"
+	"testing"
+)
 
-// type Data struct {
-// 	pattern string
-// 	input   string
-// 	matches []string
-// }
+type Data struct {
+	pattern string
+	input   string
+	matches []string
+}
 
-// func stringSliceEqual(a, b []string) bool {
-// 	if len(a) != len(b) {
-// 		return false
-// 	}
-// 	for i := range a {
-// 		if a[i] != b[i] {
-// 			return false
-// 		}
-// 	}
-// 	return true
-// }
+func stringSliceEqual(a, b []string) bool {
+	if len(a) != len(b) {
+		return false
+	}
+	for i := range a {
+		if a[i] != b[i] {
+			return false
+		}
+	}
+	return true
+}
 
-// func TestLiteralMatching(t *testing.T) {
-// 	data := []Data{
-// 		{
-// 			pattern: "a",
-// 			input:   "apple",
-// 			matches: []string{"a"},
-// 		},
-// 		{
-// 			pattern: "a",
-// 			input:   "dog",
-// 			matches: []string{},
-// 		},
-// 		{
-// 			pattern: "d",
-// 			input:   "dog",
-// 			matches: []string{"d"},
-// 		},
-// 	}
+func TestLiteralMatching(t *testing.T) {
+	data := []Data{
+		{
+			pattern: "a",
+			input:   "apple",
+			matches: []string{"a"},
+		},
+		{
+			pattern: "a",
+			input:   "dog",
+			matches: []string{},
+		},
+		{
+			pattern: "d",
+			input:   "dog",
+			matches: []string{"d"},
+		},
+	}
 
-// 	for _, item := range data {
-// 		t.Run(fmt.Sprintf("Checking input %v, for pattern %v", item.input, item.pattern), func(t *testing.T) {
-// 			regexEngine, _ := NewRegexEngine(item.pattern)
-// 			matches := regexEngine.matchLine([]byte(item.input))
-// 			matchesString := []string{}
-// 			for _, item := range matches {
-// 				matchesString = append(matchesString, string(item))
-// 			}
+	for _, item := range data {
+		t.Run(fmt.Sprintf("Checking input %v, for pattern %v", item.input, item.pattern), func(t *testing.T) {
+			regexEngine, _ := NewRegexEngine(item.pattern)
+			matches := regexEngine.matchLine([]byte(item.input))
+			matchesString := []string{}
+			for _, item := range matches {
+				matchesString = append(matchesString, string(item))
+			}
 
-// 			if !stringSliceEqual(matchesString, item.matches) {
-// 				t.Errorf("Expected to find these matches: %v, got: %v", item.matches, matchesString)
-// 			}
-// 		})
-// 	}
-// }
+			if !stringSliceEqual(matchesString, item.matches) {
+				t.Errorf("Expected to find these matches: %v, got: %v", item.matches, matchesString)
+			}
+		})
+	}
+}
 
-// func TestDigitMatching(t *testing.T) {
-// 	data := []Data{
-// 		{
-// 			pattern: "\\d",
-// 			input:   "1",
-// 			matches: []string{"1"},
-// 		},
-// 		{
-// 			pattern: "\\d",
-// 			input:   "123",
-// 			matches: []string{"1", "2", "3"},
-// 		},
-// 		{
-// 			pattern: "\\d",
-// 			input:   "a3",
-// 			matches: []string{"3"},
-// 		},
-// 		{
-// 			pattern: "\\d",
-// 			input:   "a",
-// 			matches: []string{},
-// 		},
-// 	}
+func TestDigitMatching(t *testing.T) {
+	data := []Data{
+		{
+			pattern: "\\d",
+			input:   "1",
+			matches: []string{"1"},
+		},
+		{
+			pattern: "\\d",
+			input:   "123",
+			matches: []string{"1", "2", "3"},
+		},
+		{
+			pattern: "\\d",
+			input:   "a3",
+			matches: []string{"3"},
+		},
+		{
+			pattern: "\\d",
+			input:   "a",
+			matches: []string{},
+		},
+	}
 
-// 	for _, item := range data {
-// 		t.Run(fmt.Sprintf("Checking input %v, for pattern %v", item.input, item.pattern), func(t *testing.T) {
-// 			regexEngine, _ := NewRegexEngine(item.pattern)
-// 			matches := regexEngine.matchLine([]byte(item.input))
-// 			matchesString := []string{}
-// 			for _, item := range matches {
-// 				matchesString = append(matchesString, string(item))
-// 			}
+	for _, item := range data {
+		t.Run(fmt.Sprintf("Checking input %v, for pattern %v", item.input, item.pattern), func(t *testing.T) {
+			regexEngine, _ := NewRegexEngine(item.pattern)
+			matches := regexEngine.matchLine([]byte(item.input))
+			matchesString := []string{}
+			for _, item := range matches {
+				matchesString = append(matchesString, string(item))
+			}
 
-// 			if !stringSliceEqual(matchesString, item.matches) {
-// 				t.Errorf("Expected to find these matches: %v, got: %v", item.matches, matchesString)
-// 			}
-// 		})
-// 	}
+			if !stringSliceEqual(matchesString, item.matches) {
+				t.Errorf("Expected to find these matches: %v, got: %v", item.matches, matchesString)
+			}
+		})
+	}
 
-// }
+}
 
-// func TestWordMatching(t *testing.T) {
-// 	data := []Data{
-// 		{
-// 			pattern: "\\w",
-// 			input:   "12a",
-// 			matches: []string{"1", "2", "a"},
-// 		},
-// 		{
-// 			pattern: "\\w\\w",
-// 			input:   "12ab",
-// 			matches: []string{"12", "ab"},
-// 		},
-// 		{
-// 			pattern: "\\w",
-// 			input:   "1$2",
-// 			matches: []string{"1", "2"},
-// 		},
-// 		{
-// 			pattern: "\\w",
-// 			input:   "%$#",
-// 			matches: []string{},
-// 		},
-// 	}
+func TestWordMatching(t *testing.T) {
+	data := []Data{
+		{
+			pattern: "\\w",
+			input:   "12a",
+			matches: []string{"1", "2", "a"},
+		},
+		{
+			pattern: "\\w\\w",
+			input:   "12ab",
+			matches: []string{"12", "ab"},
+		},
+		{
+			pattern: "\\w",
+			input:   "1$2",
+			matches: []string{"1", "2"},
+		},
+		{
+			pattern: "\\w",
+			input:   "%$#",
+			matches: []string{},
+		},
+	}
 
-// 	for _, item := range data {
-// 		t.Run(fmt.Sprintf("Checking input %v, for pattern %v", item.input, item.pattern), func(t *testing.T) {
-// 			regexEngine, _ := NewRegexEngine(item.pattern)
-// 			matches := regexEngine.matchLine([]byte(item.input))
-// 			matchesString := []string{}
-// 			for _, item := range matches {
-// 				matchesString = append(matchesString, string(item))
-// 			}
+	for _, item := range data {
+		t.Run(fmt.Sprintf("Checking input %v, for pattern %v", item.input, item.pattern), func(t *testing.T) {
+			regexEngine, _ := NewRegexEngine(item.pattern)
+			matches := regexEngine.matchLine([]byte(item.input))
+			matchesString := []string{}
+			for _, item := range matches {
+				matchesString = append(matchesString, string(item))
+			}
 
-// 			if !stringSliceEqual(matchesString, item.matches) {
-// 				t.Errorf("Expected to find these matches: %v, got: %v", item.matches, matchesString)
-// 			}
-// 		})
-// 	}
-// }
+			if !stringSliceEqual(matchesString, item.matches) {
+				t.Errorf("Expected to find these matches: %v, got: %v", item.matches, matchesString)
+			}
+		})
+	}
+}
 
-// func TestCharGroupMatching(t *testing.T) {
-// 	data := []Data{
-// 		{
-// 			pattern: "[\\w]",
-// 			input:   "12a",
-// 			matches: []string{"1", "2", "a"},
-// 		},
-// 		{
-// 			pattern: "[\\w\\w]",
-// 			input:   "12ab",
-// 			matches: []string{"1", "2", "a", "b"},
-// 		},
-// 		{
-// 			pattern: "[\\w]",
-// 			input:   "1$2",
-// 			matches: []string{"1", "2"},
-// 		},
-// 		{
-// 			pattern: "[\\2]",
-// 			input:   "%$#",
-// 			matches: []string{},
-// 		},
-// 		{
-// 			pattern: "[^abcd]",
-// 			input:   "abcde",
-// 			matches: []string{"e"},
-// 		},
-// 	}
+func TestCharGroupMatching(t *testing.T) {
+	data := []Data{
+		{
+			pattern: "[\\w]",
+			input:   "12a",
+			matches: []string{"1", "2", "a"},
+		},
+		{
+			pattern: "[\\w\\w]",
+			input:   "12ab",
+			matches: []string{"1", "2", "a", "b"},
+		},
+		{
+			pattern: "[\\w]",
+			input:   "1$2",
+			matches: []string{"1", "2"},
+		},
+		{
+			pattern: "[\\2]",
+			input:   "%$#",
+			matches: []string{},
+		},
+		{
+			pattern: "[^abcd]",
+			input:   "abcde",
+			matches: []string{"e"},
+		},
+	}
 
-// 	for _, item := range data {
-// 		t.Run(fmt.Sprintf("Checking input %v, for pattern %v", item.input, item.pattern), func(t *testing.T) {
-// 			regexEngine, _ := NewRegexEngine(item.pattern)
-// 			matches := regexEngine.matchLine([]byte(item.input))
-// 			matchesString := []string{}
-// 			for _, item := range matches {
-// 				matchesString = append(matchesString, string(item))
-// 			}
+	for _, item := range data {
+		t.Run(fmt.Sprintf("Checking input %v, for pattern %v", item.input, item.pattern), func(t *testing.T) {
+			regexEngine, _ := NewRegexEngine(item.pattern)
+			matches := regexEngine.matchLine([]byte(item.input))
+			matchesString := []string{}
+			for _, item := range matches {
+				matchesString = append(matchesString, string(item))
+			}
 
-// 			if !stringSliceEqual(matchesString, item.matches) {
-// 				t.Errorf("Expected to find these matches: %v, got: %v", item.matches, matchesString)
-// 			}
-// 		})
-// 	}
-// }
+			if !stringSliceEqual(matchesString, item.matches) {
+				t.Errorf("Expected to find these matches: %v, got: %v", item.matches, matchesString)
+			}
+		})
+	}
+}
 
-// func TestCombingCharClass(t *testing.T) {
-// 	data := []Data{
-// 		{
-// 			pattern: "\\d\\d\\d apples",
-// 			input:   "sally has 124 apples",
-// 			matches: []string{"124 apples"},
-// 		},
-// 		{
-// 			pattern: "\\d \\w\\w\\ws",
-// 			input:   "sally has 3 dogs",
-// 			matches: []string{"3 dogs"},
-// 		},
-// 		{
-// 			pattern: "\\d\\\\d\\\\d apples",
-// 			input:   "sally has 12 apples",
-// 			matches: []string{},
-// 		},
-// 	}
+func TestCombingCharClass(t *testing.T) {
+	data := []Data{
+		{
+			pattern: "\\d\\d\\d apples",
+			input:   "sally has 124 apples",
+			matches: []string{"124 apples"},
+		},
+		{
+			pattern: "\\d \\w\\w\\ws",
+			input:   "sally has 3 dogs",
+			matches: []string{"3 dogs"},
+		},
+		{
+			pattern: "\\d\\\\d\\\\d apples",
+			input:   "sally has 12 apples",
+			matches: []string{},
+		},
+	}
 
-// 	for _, item := range data {
-// 		t.Run(fmt.Sprintf("Checking input %v, for pattern %v", item.input, item.pattern), func(t *testing.T) {
-// 			regexEngine, _ := NewRegexEngine(item.pattern)
-// 			matches := regexEngine.matchLine([]byte(item.input))
-// 			matchesString := []string{}
-// 			for _, item := range matches {
-// 				matchesString = append(matchesString, string(item))
-// 			}
+	for _, item := range data {
+		t.Run(fmt.Sprintf("Checking input %v, for pattern %v", item.input, item.pattern), func(t *testing.T) {
+			regexEngine, _ := NewRegexEngine(item.pattern)
+			matches := regexEngine.matchLine([]byte(item.input))
+			matchesString := []string{}
+			for _, item := range matches {
+				matchesString = append(matchesString, string(item))
+			}
 
-// 			if !stringSliceEqual(matchesString, item.matches) {
-// 				t.Errorf("Expected to find these matches: %v, got: %v", item.matches, matchesString)
-// 			}
-// 		})
-// 	}
-// }
+			if !stringSliceEqual(matchesString, item.matches) {
+				t.Errorf("Expected to find these matches: %v, got: %v", item.matches, matchesString)
+			}
+		})
+	}
+}
 
-// func TestAnchor(t *testing.T) {
-// 	data := []Data{
-// 		{
-// 			pattern: "^12",
-// 			input:   "123",
-// 			matches: []string{"12"},
-// 		},
-// 		{
-// 			pattern: "^123",
-// 			input:   "234",
-// 			matches: []string{},
-// 		},
-// 		{
-// 			pattern: "^12$",
-// 			input:   "123",
-// 			matches: []string{},
-// 		},
-// 		{
-// 			pattern: "^12$",
-// 			input:   "12",
-// 			matches: []string{"12"},
-// 		},
-// 		{
-// 			pattern: "^log",
-// 			input:   "slog",
-// 			matches: []string{},
-// 		},
-// 	}
+func TestAnchor(t *testing.T) {
+	data := []Data{
+		{
+			pattern: "^12",
+			input:   "123",
+			matches: []string{"12"},
+		},
+		{
+			pattern: "^123",
+			input:   "234",
+			matches: []string{},
+		},
+		{
+			pattern: "^12$",
+			input:   "123",
+			matches: []string{},
+		},
+		{
+			pattern: "^12$",
+			input:   "12",
+			matches: []string{"12"},
+		},
+		{
+			pattern: "^log",
+			input:   "slog",
+			matches: []string{},
+		},
+	}
 
-// 	for _, item := range data {
-// 		t.Run(fmt.Sprintf("Checking input %v, for pattern %v", item.input, item.pattern), func(t *testing.T) {
-// 			regexEngine, _ := NewRegexEngine(item.pattern)
-// 			matches := regexEngine.matchLine([]byte(item.input))
-// 			matchesString := []string{}
-// 			for _, item := range matches {
-// 				matchesString = append(matchesString, string(item))
-// 			}
+	for _, item := range data {
+		t.Run(fmt.Sprintf("Checking input %v, for pattern %v", item.input, item.pattern), func(t *testing.T) {
+			regexEngine, _ := NewRegexEngine(item.pattern)
+			matches := regexEngine.matchLine([]byte(item.input))
+			matchesString := []string{}
+			for _, item := range matches {
+				matchesString = append(matchesString, string(item))
+			}
 
-// 			if !stringSliceEqual(matchesString, item.matches) {
-// 				t.Errorf("Expected to find these matches: %v, got: %v", item.matches, matchesString)
-// 			}
-// 		})
-// 	}
-// }
+			if !stringSliceEqual(matchesString, item.matches) {
+				t.Errorf("Expected to find these matches: %v, got: %v", item.matches, matchesString)
+			}
+		})
+	}
+}
 
-// func TestPlus(t *testing.T) {
-// 	data := []Data{
-// 		{
-// 			pattern: "a+",
-// 			input:   "aaaa",
-// 			matches: []string{"aaaa"},
-// 		},
-// 		{
-// 			pattern: "ca+t",
-// 			input:   "caat",
-// 			matches: []string{"caat"},
-// 		},
-// 		{
-// 			pattern: "ca+t",
-// 			input:   "caart",
-// 			matches: []string{},
-// 		},
-// 	}
+func TestPlus(t *testing.T) {
+	data := []Data{
+		{
+			pattern: "a+",
+			input:   "aaaa",
+			matches: []string{"aaaa"},
+		},
+		{
+			pattern: "ca+t",
+			input:   "caat",
+			matches: []string{"caat"},
+		},
+		{
+			pattern: "ca+t",
+			input:   "caart",
+			matches: []string{},
+		},
+	}
 
-// 	for _, item := range data {
-// 		t.Run(fmt.Sprintf("Checking input %v, for pattern %v", item.input, item.pattern), func(t *testing.T) {
-// 			regexEngine, _ := NewRegexEngine(item.pattern)
-// 			matches := regexEngine.matchLine([]byte(item.input))
-// 			matchesString := []string{}
-// 			for _, item := range matches {
-// 				matchesString = append(matchesString, string(item))
-// 			}
+	for _, item := range data {
+		t.Run(fmt.Sprintf("Checking input %v, for pattern %v", item.input, item.pattern), func(t *testing.T) {
+			regexEngine, _ := NewRegexEngine(item.pattern)
+			matches := regexEngine.matchLine([]byte(item.input))
+			matchesString := []string{}
+			for _, item := range matches {
+				matchesString = append(matchesString, string(item))
+			}
 
-// 			if !stringSliceEqual(matchesString, item.matches) {
-// 				t.Errorf("Expected to find these matches: %v, got: %v", item.matches, matchesString)
-// 			}
-// 		})
-// 	}
-// }
+			if !stringSliceEqual(matchesString, item.matches) {
+				t.Errorf("Expected to find these matches: %v, got: %v", item.matches, matchesString)
+			}
+		})
+	}
+}
 
-// func TestQuestionmark(t *testing.T) {
-// 	data := []Data{
-// 		{
-// 			pattern: "a?",
-// 			input:   "aaaa",
-// 			matches: []string{"a", "a", "a", "a"},
-// 		},
-// 		{
-// 			pattern: "a?b",
-// 			input:   "b",
-// 			matches: []string{"b"},
-// 		},
-// 		{
-// 			pattern: "a?c",
-// 			input:   "b",
-// 			matches: []string{},
-// 		},
-// 	}
+func TestQuestionmark(t *testing.T) {
+	data := []Data{
+		{
+			pattern: "a?",
+			input:   "aaaa",
+			matches: []string{"a", "a", "a", "a"},
+		},
+		{
+			pattern: "a?b",
+			input:   "b",
+			matches: []string{"b"},
+		},
+		{
+			pattern: "a?c",
+			input:   "b",
+			matches: []string{},
+		},
+	}
 
-// 	for _, item := range data {
-// 		t.Run(fmt.Sprintf("Checking input %v, for pattern %v", item.input, item.pattern), func(t *testing.T) {
-// 			regexEngine, _ := NewRegexEngine(item.pattern)
-// 			matches := regexEngine.matchLine([]byte(item.input))
-// 			matchesString := []string{}
-// 			for _, item := range matches {
-// 				matchesString = append(matchesString, string(item))
-// 			}
+	for _, item := range data {
+		t.Run(fmt.Sprintf("Checking input %v, for pattern %v", item.input, item.pattern), func(t *testing.T) {
+			regexEngine, _ := NewRegexEngine(item.pattern)
+			matches := regexEngine.matchLine([]byte(item.input))
+			matchesString := []string{}
+			for _, item := range matches {
+				matchesString = append(matchesString, string(item))
+			}
 
-// 			if !stringSliceEqual(matchesString, item.matches) {
-// 				t.Errorf("Expected to find these matches: %v, got: %v", item.matches, matchesString)
-// 			}
-// 		})
-// 	}
-// }
+			if !stringSliceEqual(matchesString, item.matches) {
+				t.Errorf("Expected to find these matches: %v, got: %v", item.matches, matchesString)
+			}
+		})
+	}
+}
 
-// func TestAsterik(t *testing.T) {
-// 	data := []Data{
-// 		{
-// 			pattern: "ca*t",
-// 			input:   "ct",
-// 			matches: []string{"ct"},
-// 		},
-// 		// {
-// 		// 	pattern: "ca*t",
-// 		// 	input:   "caaat",
-// 		// 	matches: []string{"caaat"},
-// 		// },
-// 		// {
-// 		// 	pattern: "ca*t",
-// 		// 	input:   "dog",
-// 		// 	matches: []string{},
-// 		// },
-// 		// {
-// 		// 	pattern: "k\\d*t",
-// 		// 	input:   "kt",
-// 		// 	matches: []string{"kt"},
-// 		// },
-// 		// {
-// 		// 	pattern: "k\\d*t",
-// 		// 	input:   "k1t",
-// 		// 	matches: []string{"k1t"},
-// 		// },
-// 		// {
-// 		// 	pattern: "k[abc]*t",
-// 		// 	input:   "kt",
-// 		// 	matches: []string{"kt"},
-// 		// },
-// 		// {
-// 		// 	pattern: "k[abc]*t",
-// 		// 	input:   "kat",
-// 		// 	matches: []string{"kat"},
-// 		// },
-// 		// {
-// 		// 	pattern: "k[abc]*t",
-// 		// 	input:   "kabct",
-// 		// 	matches: []string{"kabct"},
-// 		// },
-// 		// {
-// 		// 	pattern: "k[abc]*t",
-// 		// 	input:   "kxt",
-// 		// 	matches: []string{},
-// 		// },
-// 	}
+func TestAsterik(t *testing.T) {
+	data := []Data{
+		{
+			pattern: "ca*t",
+			input:   "ct",
+			matches: []string{"ct"},
+		},
+		{
+			pattern: "ca*t",
+			input:   "caaat",
+			matches: []string{"caaat"},
+		},
+		{
+			pattern: "ca*t",
+			input:   "dog",
+			matches: []string{},
+		},
+		{
+			pattern: "k\\d*t",
+			input:   "kt",
+			matches: []string{"kt"},
+		},
+		{
+			pattern: "k\\d*t",
+			input:   "k1t",
+			matches: []string{"k1t"},
+		},
+		{
+			pattern: "k[abc]*t",
+			input:   "kt",
+			matches: []string{"kt"},
+		},
+		{
+			pattern: "k[abc]*t",
+			input:   "kat",
+			matches: []string{"kat"},
+		},
+		{
+			pattern: "k[abc]*t",
+			input:   "kabct",
+			matches: []string{"kabct"},
+		},
+		{
+			pattern: "k[abc]*t",
+			input:   "kxt",
+			matches: []string{},
+		},
+	}
 
-// 	for _, item := range data {
-// 		t.Run(fmt.Sprintf("Checking input %v, for pattern %v", item.input, item.pattern), func(t *testing.T) {
-// 			regexEngine, _ := NewRegexEngine(item.pattern)
-// 			matches := regexEngine.matchLine([]byte(item.input))
-// 			matchesString := []string{}
-// 			for _, item := range matches {
-// 				matchesString = append(matchesString, string(item))
-// 			}
+	for _, item := range data {
+		t.Run(fmt.Sprintf("Checking input %v, for pattern %v", item.input, item.pattern), func(t *testing.T) {
+			regexEngine, _ := NewRegexEngine(item.pattern)
+			matches := regexEngine.matchLine([]byte(item.input))
+			matchesString := []string{}
+			for _, item := range matches {
+				matchesString = append(matchesString, string(item))
+			}
 
-// 			if !stringSliceEqual(matchesString, item.matches) {
-// 				t.Errorf("Expected to find these matches: %v, got: %v", item.matches, matchesString)
-// 			}
-// 		})
-// 	}
-// }
+			if !stringSliceEqual(matchesString, item.matches) {
+				t.Errorf("Expected to find these matches: %v, got: %v", item.matches, matchesString)
+			}
+		})
+	}
+}
 
-// func TestDot(t *testing.T) {
-// 	data := []Data{
-// 		{
-// 			pattern: "a.b",
-// 			input:   "aab",
-// 			matches: []string{"aab"},
-// 		},
-// 		{
-// 			pattern: "a.",
-// 			input:   "aa",
-// 			matches: []string{"aa"},
-// 		},
-// 		{
-// 			pattern: "a.",
-// 			input:   "b",
-// 			matches: []string{},
-// 		},
-// 		{
-// 			pattern: "a.+",
-// 			input:   "accc",
-// 			matches: []string{"accc"},
-// 		},
-// 	}
+func TestDot(t *testing.T) {
+	data := []Data{
+		{
+			pattern: "a.b",
+			input:   "aab",
+			matches: []string{"aab"},
+		},
+		{
+			pattern: "a.",
+			input:   "aa",
+			matches: []string{"aa"},
+		},
+		{
+			pattern: "a.",
+			input:   "b",
+			matches: []string{},
+		},
+		{
+			pattern: "a.+",
+			input:   "accc",
+			matches: []string{"accc"},
+		},
+	}
 
-// 	for _, item := range data {
-// 		t.Run(fmt.Sprintf("Checking input %v, for pattern %v", item.input, item.pattern), func(t *testing.T) {
-// 			regexEngine, _ := NewRegexEngine(item.pattern)
-// 			matches := regexEngine.matchLine([]byte(item.input))
-// 			matchesString := []string{}
-// 			for _, item := range matches {
-// 				matchesString = append(matchesString, string(item))
-// 			}
+	for _, item := range data {
+		t.Run(fmt.Sprintf("Checking input %v, for pattern %v", item.input, item.pattern), func(t *testing.T) {
+			regexEngine, _ := NewRegexEngine(item.pattern)
+			matches := regexEngine.matchLine([]byte(item.input))
+			matchesString := []string{}
+			for _, item := range matches {
+				matchesString = append(matchesString, string(item))
+			}
 
-// 			if !stringSliceEqual(matchesString, item.matches) {
-// 				t.Errorf("Expected to find these matches: %v, got: %v", item.matches, matchesString)
-// 			}
-// 		})
-// 	}
-// }
+			if !stringSliceEqual(matchesString, item.matches) {
+				t.Errorf("Expected to find these matches: %v, got: %v", item.matches, matchesString)
+			}
+		})
+	}
+}
 
-// func TestGroup(t *testing.T) {
-// 	data := []Data{
-// 		{
-// 			pattern: "(a+)",
-// 			input:   "aaa",
-// 			matches: []string{"aaa"},
-// 		},
-// 		{
-// 			pattern: "(a)",
-// 			input:   "a",
-// 			matches: []string{"a"},
-// 		},
-// 		{
-// 			pattern: "(b)",
-// 			input:   "a",
-// 			matches: []string{},
-// 		},
-// 		{
-// 			pattern: "^I see (\\d (cat|dog|cow)s?(, | and )?)+$",
-// 			input:   "I see 1 cat, 2 dogs and 3 cows",
-// 			matches: []string{"I see 1 cat, 2 dogs and 3 cows"},
-// 		},
-// 		{
-// 			pattern: "^I see (\\d (cat|dog|cow)(, | and )?)+$",
-// 			input:   "I see 1 cat, 2 dogs and 3 cows",
-// 			matches: []string{},
-// 		},
-// 	}
+func TestGroup(t *testing.T) {
+	data := []Data{
+		{
+			pattern: "(a+)",
+			input:   "aaa",
+			matches: []string{"aaa"},
+		},
+		{
+			pattern: "(a)",
+			input:   "a",
+			matches: []string{"a"},
+		},
+		{
+			pattern: "(b)",
+			input:   "a",
+			matches: []string{},
+		},
+		{
+			pattern: "^I see (\\d (cat|dog|cow)s?(, | and )?)+$",
+			input:   "I see 1 cat, 2 dogs and 3 cows",
+			matches: []string{"I see 1 cat, 2 dogs and 3 cows"},
+		},
+		{
+			pattern: "^I see (\\d (cat|dog|cow)(, | and )?)+$",
+			input:   "I see 1 cat, 2 dogs and 3 cows",
+			matches: []string{},
+		},
+	}
 
-// 	for _, item := range data {
-// 		t.Run(fmt.Sprintf("Checking input %v, for pattern %v", item.input, item.pattern), func(t *testing.T) {
-// 			regexEngine, _ := NewRegexEngine(item.pattern)
-// 			matches := regexEngine.matchLine([]byte(item.input))
-// 			matchesString := []string{}
-// 			for _, item := range matches {
-// 				matchesString = append(matchesString, string(item))
-// 			}
+	for _, item := range data {
+		t.Run(fmt.Sprintf("Checking input %v, for pattern %v", item.input, item.pattern), func(t *testing.T) {
+			regexEngine, _ := NewRegexEngine(item.pattern)
+			matches := regexEngine.matchLine([]byte(item.input))
+			matchesString := []string{}
+			for _, item := range matches {
+				matchesString = append(matchesString, string(item))
+			}
 
-// 			if !stringSliceEqual(matchesString, item.matches) {
-// 				t.Errorf("Expected to find these matches: %v, got: %v", item.matches, matchesString)
-// 			}
-// 		})
-// 	}
-// }
+			if !stringSliceEqual(matchesString, item.matches) {
+				t.Errorf("Expected to find these matches: %v, got: %v", item.matches, matchesString)
+			}
+		})
+	}
+}
 
-// func TestAlternation(t *testing.T) {
-// 	data := []Data{
-// 		{
-// 			pattern: "(a|b)",
-// 			input:   "ab",
-// 			matches: []string{"a", "b"},
-// 		},
-// 		{
-// 			pattern: "(abc|def)",
-// 			input:   "abc",
-// 			matches: []string{"abc"},
-// 		},
-// 		{
-// 			pattern: "(abc|r)",
-// 			input:   "aa",
-// 			matches: []string{},
-// 		},
-// 		{
-// 			pattern: "a|b",
-// 			input:   "a",
-// 			matches: []string{"a"},
-// 		},
-// 	}
+func TestAlternation(t *testing.T) {
+	data := []Data{
+		{
+			pattern: "(a|b)",
+			input:   "ab",
+			matches: []string{"a", "b"},
+		},
+		{
+			pattern: "(abc|def)",
+			input:   "abc",
+			matches: []string{"abc"},
+		},
+		{
+			pattern: "(abc|r)",
+			input:   "aa",
+			matches: []string{},
+		},
+		{
+			pattern: "a|b",
+			input:   "a",
+			matches: []string{"a"},
+		},
+	}
 
-// 	for _, item := range data {
-// 		t.Run(fmt.Sprintf("Checking input %v, for pattern %v", item.input, item.pattern), func(t *testing.T) {
-// 			regexEngine, _ := NewRegexEngine(item.pattern)
-// 			matches := regexEngine.matchLine([]byte(item.input))
-// 			matchesString := []string{}
-// 			for _, item := range matches {
-// 				matchesString = append(matchesString, string(item))
-// 			}
+	for _, item := range data {
+		t.Run(fmt.Sprintf("Checking input %v, for pattern %v", item.input, item.pattern), func(t *testing.T) {
+			regexEngine, _ := NewRegexEngine(item.pattern)
+			matches := regexEngine.matchLine([]byte(item.input))
+			matchesString := []string{}
+			for _, item := range matches {
+				matchesString = append(matchesString, string(item))
+			}
 
-// 			if !stringSliceEqual(matchesString, item.matches) {
-// 				t.Errorf("Expected to find these matches: %v, got: %v", item.matches, matchesString)
-// 			}
-// 		})
-// 	}
-// }
+			if !stringSliceEqual(matchesString, item.matches) {
+				t.Errorf("Expected to find these matches: %v, got: %v", item.matches, matchesString)
+			}
+		})
+	}
+}
 
-// func TestBackreference(t *testing.T) {
-// 	data := []Data{
-// 		{
-// 			pattern: "(cat) and \\1",
-// 			input:   "cat and cat",
-// 			matches: []string{"cat and cat"},
-// 		},
-// 		{
-// 			pattern: "((c.t|d.g) and (f..h|b..d)), \\2 with \\3, \\1",
-// 			input:   "bat and fish, bat with fish, bat and fish",
-// 			matches: []string{},
-// 		},
+func TestBackreference(t *testing.T) {
+	data := []Data{
+		{
+			pattern: "(cat) and \\1",
+			input:   "cat and cat",
+			matches: []string{"cat and cat"},
+		},
+		{
+			pattern: "((c.t|d.g) and (f..h|b..d)), \\2 with \\3, \\1",
+			input:   "bat and fish, bat with fish, bat and fish",
+			matches: []string{},
+		},
 
-// 		{
-// 			pattern: "^((\\w+) (\\w+)) is made of \\2 and \\3. love \\1$",
-// 			input:   "apple pie is made of apple and pie. love apple pie",
-// 			matches: []string{"apple pie is made of apple and pie. love apple pie"},
-// 		},
-// 		{
-// 			pattern: "((\\w\\w\\w\\w) (\\d\\d\\d)) is doing \\2 \\3 times, and again \\1 times",
-// 			input:   "grep 101 is doing grep 101 times, and again grep 101 times",
-// 			matches: []string{"grep 101 is doing grep 101 times, and again grep 101 times"},
-// 		},
-// 		{
-// 			pattern: "((how+dy) (he?y) there)\" is made up of \"\\2\" and \"\\3\". \\1",
-// 			input:   "howwdy hey there\" is made up of \"howwdy\" and \"hey\". howwdy hey there",
-// 			matches: []string{"howwdy hey there\" is made up of \"howwdy\" and \"hey\". howwdy hey there"},
-// 		},
-// 	}
+		{
+			pattern: "^((\\w+) (\\w+)) is made of \\2 and \\3. love \\1$",
+			input:   "apple pie is made of apple and pie. love apple pie",
+			matches: []string{"apple pie is made of apple and pie. love apple pie"},
+		},
+		{
+			pattern: "((\\w\\w\\w\\w) (\\d\\d\\d)) is doing \\2 \\3 times, and again \\1 times",
+			input:   "grep 101 is doing grep 101 times, and again grep 101 times",
+			matches: []string{"grep 101 is doing grep 101 times, and again grep 101 times"},
+		},
+		{
+			pattern: "((how+dy) (he?y) there)\" is made up of \"\\2\" and \"\\3\". \\1",
+			input:   "howwdy hey there\" is made up of \"howwdy\" and \"hey\". howwdy hey there",
+			matches: []string{"howwdy hey there\" is made up of \"howwdy\" and \"hey\". howwdy hey there"},
+		},
+	}
 
-// 	for _, item := range data {
-// 		t.Run(fmt.Sprintf("Checking input %v, for pattern %v", item.input, item.pattern), func(t *testing.T) {
-// 			regexEngine, _ := NewRegexEngine(item.pattern)
-// 			matches := regexEngine.matchLine([]byte(item.input))
-// 			matchesString := []string{}
-// 			for _, item := range matches {
-// 				matchesString = append(matchesString, string(item))
-// 			}
+	for _, item := range data {
+		t.Run(fmt.Sprintf("Checking input %v, for pattern %v", item.input, item.pattern), func(t *testing.T) {
+			regexEngine, _ := NewRegexEngine(item.pattern)
+			matches := regexEngine.matchLine([]byte(item.input))
+			matchesString := []string{}
+			for _, item := range matches {
+				matchesString = append(matchesString, string(item))
+			}
 
-// 			if !stringSliceEqual(matchesString, item.matches) {
-// 				t.Errorf("Expected to find these matches: %v, got: %v", item.matches, matchesString)
-// 			}
-// 		})
-// 	}
-// }
+			if !stringSliceEqual(matchesString, item.matches) {
+				t.Errorf("Expected to find these matches: %v, got: %v", item.matches, matchesString)
+			}
+		})
+	}
+}
 
-// func TestQuantiier(t *testing.T) {
-// 	data := []Data{
-// 		{
-// 			pattern: "c{1}",
-// 			input:   "cc",
-// 			matches: []string{"cc"},
-// 		},
-// 	}
+func TestQuantiier(t *testing.T) {
+	data := []Data{
+		{
+			pattern: "ca{3}t",
+			input:   "caaat",
+			matches: []string{"caaat"},
+		},
+		{
+			pattern: "ca{2}t",
+			input:   "caaat",
+			matches: []string{},
+		},
+		{
+			pattern: "ca{3}t",
+			input:   "caaaaat",
+			matches: []string{},
+		},
+		{
+			pattern: "ca{2,}t",
+			input:   "caaaaat",
+			matches: []string{"caaaaat"},
+		},
+		{
+			pattern: "ca{2,}t",
+			input:   "cat",
+			matches: []string{},
+		},
+		{
+			pattern: "ca{2,4}t",
+			input:   "caat",
+			matches: []string{"caat"},
+		},
+		{
+			pattern: "ca{2,4}t",
+			input:   "caaat",
+			matches: []string{"caaat"},
+		},
+		{
+			pattern: "ca{2,4}t",
+			input:   "caaaat",
+			matches: []string{"caaaat"},
+		},
+		{
+			pattern: "ca{2,4}t",
+			input:   "caaaaat",
+			matches: []string{},
+		},
+		{
+			pattern: "d\\d{2}g",
+			input:   "d42g",
+			matches: []string{"d42g"},
+		},
+		{
+			pattern: "d\\d{2}g",
+			input:   "d1g",
+			matches: []string{},
+		},
+		{
+			pattern: "d\\d{2}g",
+			input:   "d123g",
+			matches: []string{},
+		},
+		{
+			pattern: "n\\d{1,3}m",
+			input:   "n123m",
+			matches: []string{"n123m"},
+		},
+		{
+			pattern: "n\\d{1,3}m",
+			input:   "n1234m",
+			matches: []string{},
+		},
+		{
+			pattern: "x\\d{3,}y",
+			input:   "x9999y",
+			matches: []string{"x9999y"},
+		},
+		{
+			pattern: "x\\d{3,}y",
+			input:   "x42y",
+			matches: []string{},
+		},
+		{
+			pattern: "c[xyz]{4}w",
+			input:   "czyxzw",
+			matches: []string{"czyxzw"},
+		},
+		{
+			pattern: "c[xyz]{4}w",
+			input:   "cxyzw",
+			matches: []string{},
+		},
 
-// 	for _, item := range data {
-// 		t.Run(fmt.Sprintf("Checking input %v, for pattern %v", item.input, item.pattern), func(t *testing.T) {
-// 			regexEngine, _ := NewRegexEngine(item.pattern)
-// 			matches := regexEngine.matchLine([]byte(item.input))
-// 			matchesString := []string{}
-// 			for _, item := range matches {
-// 				matchesString = append(matchesString, string(item))
-// 			}
+		{
+			pattern: "b[aeiou]{2,}r",
+			input:   "baeiour",
+			matches: []string{"baeiour"},
+		},
+		{
+			pattern: "b[aeiou]{2,}r",
+			input:   "bar",
+			matches: []string{},
+		},
+		{
+			pattern: "p[xyz]{2,3}q",
+			input:   "pzzzq",
+			matches: []string{"pzzzq"},
+		},
+		{
+			pattern: "p[xyz]{2,3}q",
+			input:   "pxq",
+			matches: []string{},
+		},
+		{
+			pattern: "p[xyz]{2,3}q",
+			input:   "pxyzyq",
+			matches: []string{},
+		},
+		{
+			pattern: "^\\d{4}-\\d{1,2}-\\d{1,2} \\d{1,2}:\\d{1,2} LOG (INFO|DEBUG) \\w+$",
+			input:   "2022-9-6 18:19 LOG INFO session_validated",
+			matches: []string{"2022-9-6 18:19 LOG INFO session_validated"},
+		},
+		{
+			pattern: "^\\d{4}-\\d{1,2}",
+			input:   "2022-9",
+			matches: []string{"2022-9"},
+		},
+	}
 
-// 			if !stringSliceEqual(matchesString, item.matches) {
-// 				t.Errorf("Expected to find these matches: %v, got: %v", item.matches, matchesString)
-// 			}
-// 		})
-// 	}
-// }
+	for _, item := range data {
+		t.Run(fmt.Sprintf("Checking input %v, for pattern %v", item.input, item.pattern), func(t *testing.T) {
+			regexEngine, _ := NewRegexEngine(item.pattern)
+			matches := regexEngine.matchLine([]byte(item.input))
+			matchesString := []string{}
+			for _, item := range matches {
+				matchesString = append(matchesString, string(item))
+			}
+
+			if !stringSliceEqual(matchesString, item.matches) {
+				t.Errorf("Expected to find these matches: %v, got: %v", item.matches, matchesString)
+			}
+		})
+	}
+}
