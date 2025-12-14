@@ -3,7 +3,6 @@ package main
 import (
 	"bufio"
 	"fmt"
-	"io"
 	"log"
 	"os"
 	"path/filepath"
@@ -94,10 +93,11 @@ func listfilePath(folder string) ([]string, error) {
 }
 
 type Args struct {
-	pattern     string
-	isRecusrive bool
-	directory   string
-	filePathes  []string
+	pattern      string
+	isRecusrive  bool
+	onlyMatching bool
+	directory    string
+	filePathes   []string
 }
 
 func parseArgs() (Args, error) {
@@ -106,6 +106,11 @@ func parseArgs() (Args, error) {
 
 	if argsCopy[0] == "-r" {
 		args.isRecusrive = true
+		argsCopy = argsCopy[1:]
+	}
+
+	if argsCopy[0] == "-o" {
+		args.onlyMatching = true
 		argsCopy = argsCopy[1:]
 	}
 
@@ -183,18 +188,34 @@ func cli() {
 			os.Exit(1)
 		}
 	} else {
-		line, err := io.ReadAll(os.Stdin)
-		lines := [][]byte{line}
+		scanner := bufio.NewScanner(os.Stdin)
+		var lines [][]byte
+		for scanner.Scan() {
+			line := scanner.Bytes()
+			lines = append(lines, line)
+		}
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "error: read input text: %v\n", err)
 			os.Exit(2)
 		}
-		_, isMatch := regexEngine.matchMultiLine(lines)
+		output, isMatch := regexEngine.matchMultiLine(lines)
 
 		if !isMatch {
 			os.Exit(1)
 		}
 
+		for _, item := range output {
+			if !args.onlyMatching {
+				fmt.Println(string(item.line))
+
+			} else {
+
+				for _, match := range item.matchPhrase {
+					fmt.Println(string(match))
+				}
+			}
+
+		}
 	}
 
 }
@@ -230,10 +251,6 @@ func (rg *RegexEngine) parsePattern() error {
 
 	return nil
 }
-
-// func (rg RegexEngine) matchFilesMultiline(files []File) ([][][]byte, bool) {
-
-// }
 
 type RegexOutput struct {
 	line        []byte
