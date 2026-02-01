@@ -92,17 +92,44 @@ func listfilePath(folder string) ([]string, error) {
 	return filePath, nil
 }
 
+type ColorValue string
+
+const (
+	ColorAlways ColorValue = "ColorAlways"
+	ColorNever  ColorValue = "ColorNever"
+	ColorAuto   ColorValue = "ColorAuto"
+)
+
 type Args struct {
 	pattern      string
 	isRecusrive  bool
 	onlyMatching bool
 	directory    string
 	filePathes   []string
+	color        ColorValue
 }
 
 func parseArgs() (Args, error) {
 	args := Args{}
 	argsCopy := os.Args[1:]
+
+	if strings.Contains(argsCopy[0], "--color") {
+		parts := strings.Split(argsCopy[0], "=")
+		if len(parts) == 2 {
+			value := parts[1]
+			switch value {
+			case "always":
+				args.color = ColorAlways
+			case "auto":
+				args.color = ColorAuto
+			case "never":
+				args.color = ColorNever
+			default:
+				panic(fmt.Sprintf("unknown color option %v", value))
+			}
+		}
+		argsCopy = argsCopy[1:]
+	}
 
 	if argsCopy[0] == "-r" {
 		args.isRecusrive = true
@@ -172,6 +199,7 @@ func cli() {
 			}
 
 			for _, match := range matches {
+
 				if isPrefix {
 					fmt.Println(file.name + ":" + string(match.line))
 
@@ -206,7 +234,28 @@ func cli() {
 
 		for _, item := range output {
 			if !args.onlyMatching {
-				fmt.Println(string(item.line))
+				line := string(item.line)
+				fileInfo, _ := os.Stdout.Stat()
+				isTTY := (fileInfo.Mode() & os.ModeCharDevice) != 0
+				if args.color == ColorAlways || (args.color == ColorAuto && isTTY) {
+					var result strings.Builder
+					lastPos := 0
+
+					for _, word := range item.matchPhrase {
+						wordStr := string(word)
+						idx := strings.Index(line[lastPos:], wordStr)
+
+						if idx != -1 {
+							idx += lastPos
+							result.WriteString(line[lastPos:idx])
+							result.WriteString("\033[01;31m" + wordStr + "\033[m")
+							lastPos = idx + len(wordStr)
+						}
+					}
+					result.WriteString(line[lastPos:])
+					line = result.String()
+				}
+				fmt.Println(line)
 
 			} else {
 
